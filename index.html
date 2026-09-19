@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NEURO RUN — Run. Think. Survive.</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <!-- Screen Flash Feedback Overlay -->
+    <div id="flash-overlay"></div>
+
+    <!-- UI Overlay Root -->
+    <div id="ui-root">
+      <!-- Loading Screen -->
+      <div id="loading-screen" class="screen-modal interactive">
+        <div class="modal-content">
+          <h1 class="game-title-large" style="font-size: 48px;">NEURO RUN</h1>
+          <p class="game-tagline-sub" style="font-size: 13px;">RUN. THINK. SURVIVE.</p>
+          <div class="loading-bar-container">
+            <div id="loading-bar"></div>
+          </div>
+          <p id="loading-desc">Calibrating Railway Simulation...</p>
+        </div>
+      </div>
+
+      <!-- Cinematic Start Screen -->
+      <div id="start-screen" class="screen-modal interactive" style="display: none;">
+        <div class="start-title-container">
+          <div class="start-brand-badge">⚡ NEURAL RUNWAY</div>
+          <h1 class="game-title-hero">NEURO RUN</h1>
+          <p class="game-tagline-hero">Run. Think. Survive.</p>
+
+          <div class="start-cta-wrap">
+            <button id="btn-start" class="btn-start-hero">START RUN</button>
+          </div>
+
+          <div class="start-controls-strip">
+            <div class="ctrl-chip">
+              <span class="ctrl-btn-label">A / D</span>
+              <span class="ctrl-btn-action">CHANGE LANE</span>
+            </div>
+            <div class="ctrl-chip">
+              <span class="ctrl-btn-label">W / SPACE</span>
+              <span class="ctrl-btn-action">JUMP</span>
+            </div>
+            <div class="ctrl-chip">
+              <span class="ctrl-btn-label">S</span>
+              <span class="ctrl-btn-action">SLIDE</span>
+            </div>
+          </div>
+
+          <div class="start-footer-row">
+            <span class="sub-branding">RUN &bull; THINK &bull; SURVIVE</span>
+            <button id="btn-mute" class="btn-audio-pill">MUTE AUDIO</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live HUD -->
+      <div id="hud">
+        <div class="hud-top-bar">
+          <div class="hud-stat-box">
+            <div class="stat-label">SCORE</div>
+            <div id="hud-score" class="stat-value gold">0</div>
+          </div>
+
+          <div class="hud-stat-box" style="text-align: center;">
+            <div class="stat-label">DISTANCE</div>
+            <div id="hud-distance" class="stat-value">0m</div>
+          </div>
+
+          <div id="hud-combo-badge" class="combo-badge">
+            <div class="stat-label" style="color: var(--accent-purple);">COMBO</div>
+            <div id="hud-combo" class="combo-text">x1</div>
+          </div>
+        </div>
+
+        <!-- HUD Bottom Bar -->
+        <div class="hud-bottom-bar">
+          <div class="controls-hint">
+            <span>A/D</span> Change Lane &bull; <span>W/Space</span> Jump &bull; <span>S</span> Slide
+          </div>
+          <div class="hud-stat-box" style="min-width: 120px; text-align: right;">
+            <div class="stat-label">SPEED</div>
+            <div id="hud-speed" class="stat-value" style="font-size: 20px;">65 km/h</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dedicated Question Pause Modal Screen -->
+      <div id="question-screen" class="interactive">
+        <div class="question-modal-box">
+          <div class="question-header">
+            <span id="modal-q-category" class="q-badge">JAVASCRIPT</span>
+            <span class="q-pause-indicator">GAME FROZEN FOR KNOWLEDGE GATE</span>
+          </div>
+
+          <h2 id="modal-q-text" class="modal-question-text">Which keyword declares a variable in JavaScript?</h2>
+
+          <div class="lane-options-grid">
+            <div id="opt-card-0" class="lane-option-card">
+              <span class="opt-lane-header"><span class="opt-key-tag">1</span> LEFT LANE</span>
+              <span id="opt-text-0" class="opt-answer-title">Option 1</span>
+            </div>
+            <div id="opt-card-1" class="lane-option-card">
+              <span class="opt-lane-header"><span class="opt-key-tag">2</span> CENTER LANE</span>
+              <span id="opt-text-1" class="opt-answer-title">Option 2</span>
+            </div>
+            <div id="opt-card-2" class="lane-option-card">
+              <span class="opt-lane-header"><span class="opt-key-tag">3</span> RIGHT LANE</span>
+              <span id="opt-text-2" class="opt-answer-title">Option 3</span>
+            </div>
+          </div>
+
+          <p class="modal-footer-hint">
+            Press <kbd>A/D</kbd> or <kbd>1/2/3</kbd> to steer &bull; Press <kbd>ENTER</kbd> / <kbd>SPACE</kbd> or click to submit
+          </p>
+          <button id="btn-submit-answer" class="btn-confirm-answer">SUBMIT ANSWER</button>
+        </div>
+      </div>
+
+      <!-- Pause Screen -->
+      <div id="pause-screen" class="screen-modal interactive" style="display: none;">
+        <div class="modal-content pause-modal-card">
+          <h1 class="game-title-large pause-title">PAUSED</h1>
+          <p class="game-tagline-sub">TAKE A BREATHER, RUNNER</p>
+          <div class="modal-btn-stack">
+            <button id="btn-resume" class="btn-game-primary">RESUME RUN</button>
+            <button id="btn-pause-restart" class="btn-game-secondary">RESTART RUN</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Game Over / Crashed Screen -->
+      <div id="gameover-screen" class="screen-modal interactive" style="display: none;">
+        <div class="modal-content crashed-modal-card">
+          <h1 class="crashed-heading">CRASHED!</h1>
+          <p class="game-tagline-sub analytics-tag">RUN ANALYTICS</p>
+
+          <div class="analytics-card-grid">
+            <div class="analytic-item">
+              <span class="analytic-label">Final Score</span>
+              <span id="go-score" class="analytic-val gold">0</span>
+            </div>
+            <div class="analytic-item">
+              <span class="analytic-label">Distance</span>
+              <span id="go-distance" class="analytic-val cyan">0m</span>
+            </div>
+            <div class="analytic-item">
+              <span class="analytic-label">Knowledge Gates</span>
+              <span id="go-correct" class="analytic-val">0 / 0</span>
+            </div>
+            <div class="analytic-item">
+              <span class="analytic-label">Accuracy</span>
+              <span id="go-accuracy" class="analytic-val green">100%</span>
+            </div>
+            <div class="analytic-item">
+              <span class="analytic-label">Max Combo</span>
+              <span id="go-combo" class="analytic-val purple">x1</span>
+            </div>
+            <div class="analytic-item">
+              <span class="analytic-label">High Score</span>
+              <span id="go-highscore" class="analytic-val gold">0</span>
+            </div>
+          </div>
+
+          <div class="crashed-cta-wrap">
+            <button id="btn-restart" class="btn-game-primary btn-run-again">RUN AGAIN</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Entry Module -->
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
