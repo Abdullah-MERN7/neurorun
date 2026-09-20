@@ -395,9 +395,6 @@ export class Game {
     );
 
     window.addEventListener('resize', this.onWindowResize.bind(this));
-
-    // REQUIREMENT 9: Single Animation Loop using setAnimationLoop
-    this.renderer.setAnimationLoop(this.animate.bind(this));
     return true;
   }
 
@@ -443,6 +440,9 @@ export class Game {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.2;
     document.body.appendChild(this.renderer.domElement);
+
+    // REQUIREMENT 9: Start animation loop immediately to keep WebGL context active during asset loading
+    this.renderer.setAnimationLoop(this.animate.bind(this));
 
     // REQUIREMENT 5 & 17: Empirical Context Loss Event Handlers with Alert Modal
     const canvas = this.renderer.domElement;
