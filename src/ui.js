@@ -11,6 +11,27 @@ export class UIManager {
       uiRoot: document.getElementById('ui-root'),
       flashOverlay: document.getElementById('flash-overlay'),
 
+      // WebGL Error & Diagnostic Telemetry
+      webglErrorScreen: document.getElementById('webgl-error-screen'),
+      webglErrorMsg: document.getElementById('webgl-error-msg'),
+
+      diagnosticOverlay: document.getElementById('diagnostic-overlay'),
+      btnCloseDiag: document.getElementById('btn-close-diag'),
+      diagWebGL2: document.getElementById('diag-webgl2'),
+      diagRenderer: document.getElementById('diag-renderer'),
+      diagDevice: document.getElementById('diag-device'),
+      diagViewport: document.getElementById('diag-viewport'),
+      diagDPR: document.getElementById('diag-dpr'),
+      diagEffectiveDPR: document.getElementById('diag-effective-dpr'),
+      diagAssets: document.getElementById('diag-assets'),
+      diagContext: document.getElementById('diag-context'),
+      diagDrawCalls: document.getElementById('diag-draw-calls'),
+      diagTriangles: document.getElementById('diag-triangles'),
+      diagGeometries: document.getElementById('diag-geometries'),
+      diagTextures: document.getElementById('diag-textures'),
+      diagFailedAssets: document.getElementById('diag-failed-assets'),
+      diagJSErrors: document.getElementById('diag-js-errors'),
+
       // Loading
       loadingScreen: document.getElementById('loading-screen'),
       loadingBar: document.getElementById('loading-bar'),
@@ -74,6 +95,58 @@ export class UIManager {
       goCombo: document.getElementById('go-combo'),
       btnRestart: document.getElementById('btn-restart')
     };
+
+    if (this.elements.btnCloseDiag) {
+      this.elements.btnCloseDiag.onclick = () => this.hideDiagnostics();
+    }
+  }
+
+  showWebGLError(msg) {
+    this.hideLoading();
+    if (this.elements.webglErrorScreen) {
+      if (msg && this.elements.webglErrorMsg) this.elements.webglErrorMsg.textContent = msg;
+      this.elements.webglErrorScreen.style.display = 'flex';
+    }
+  }
+
+  showDiagnostics(info) {
+    if (this.elements.diagnosticOverlay) {
+      this.elements.diagnosticOverlay.style.display = 'flex';
+      this.updateDiagnostics(info);
+    }
+  }
+
+  hideDiagnostics() {
+    if (this.elements.diagnosticOverlay) {
+      this.elements.diagnosticOverlay.style.display = 'none';
+    }
+  }
+
+  updateDiagnostics(info) {
+    if (!info) return;
+    if (this.elements.diagWebGL2) this.elements.diagWebGL2.textContent = info.webgl2 ? 'YES' : 'NO';
+    if (this.elements.diagRenderer) this.elements.diagRenderer.textContent = info.rendererCreated ? 'YES' : 'NO';
+    if (this.elements.diagDevice) this.elements.diagDevice.textContent = info.isMobile ? 'Mobile' : 'Desktop';
+    if (this.elements.diagViewport) this.elements.diagViewport.textContent = `${info.width || window.innerWidth}x${info.height || window.innerHeight}`;
+    if (this.elements.diagDPR) this.elements.diagDPR.textContent = info.dpr ? info.dpr.toFixed(2) : (window.devicePixelRatio || 1).toFixed(2);
+    if (this.elements.diagEffectiveDPR) this.elements.diagEffectiveDPR.textContent = info.effectiveDPR ? info.effectiveDPR.toFixed(2) : '--';
+    if (this.elements.diagAssets) this.elements.diagAssets.textContent = `${info.assetsLoaded || 0} / ${info.totalAssets || 0}`;
+    if (this.elements.diagContext) this.elements.diagContext.textContent = info.contextState || 'ACTIVE';
+    if (this.elements.diagDrawCalls) this.elements.diagDrawCalls.textContent = info.drawCalls !== undefined ? info.drawCalls : '--';
+    if (this.elements.diagTriangles) this.elements.diagTriangles.textContent = info.triangles !== undefined ? info.triangles : '--';
+    if (this.elements.diagGeometries) this.elements.diagGeometries.textContent = info.geometries !== undefined ? info.geometries : '--';
+    if (this.elements.diagTextures) this.elements.diagTextures.textContent = info.textures !== undefined ? info.textures : '--';
+
+    if (this.elements.diagFailedAssets) {
+      this.elements.diagFailedAssets.textContent = (info.failedAssets && info.failedAssets.length > 0)
+        ? info.failedAssets.join('\n')
+        : 'None';
+    }
+    if (this.elements.diagJSErrors) {
+      this.elements.diagJSErrors.textContent = (info.jsErrors && info.jsErrors.length > 0)
+        ? info.jsErrors.join('\n')
+        : 'None';
+    }
   }
 
   updateLoading(progress, text) {

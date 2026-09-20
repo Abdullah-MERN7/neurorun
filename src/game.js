@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import WebGL from 'three/addons/capabilities/WebGL.js';
 import { CONFIG } from './config.js';
 import { assetLoader } from './assetLoader.js';
 import { Player, PlayerState } from './player.js';
@@ -43,6 +44,31 @@ export class Game {
     this.inputManager = null;
     this.dog = null;
 
+    // Mobile & Device Capability Profile
+    this.isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    this.pixelRatio = this.isMobile
+      ? Math.min(window.devicePixelRatio || 1, 1.5)
+      : Math.min(window.devicePixelRatio || 1, 2.0);
+    this.contextState = 'ACTIVE';
+    this.jsErrors = [];
+    this.lastWidth = 0;
+    this.lastHeight = 0;
+
+    // Listen for uncaught JS errors for telemetry
+    window.addEventListener('error', (e) => {
+      if (e && e.message) {
+        this.jsErrors.push(`${e.message} at ${e.filename || ''}:${e.lineno || ''}`);
+        uiManager.updateDiagnostics(this.getDiagnosticInfo());
+      }
+    });
+    window.addEventListener('unhandledrejection', (e) => {
+      if (e && e.reason) {
+        const msg = e.reason.message || String(e.reason);
+        this.jsErrors.push(`Unhandled Rejection: ${msg}`);
+        uiManager.updateDiagnostics(this.getDiagnosticInfo());
+      }
+    });
+
     // Runtime gameplay state
     this.speed = CONFIG.INITIAL_SPEED;
     this.score = 0;
@@ -68,43 +94,86 @@ export class Game {
     this.hemiLight = null;
   }
 
+  getDiagnosticInfo() {
+    return {
+      webgl2: WebGL.isWebGL2Available(),
+      rendererCreated: !!this.renderer,
+      isMobile: this.isMobile,
+      width: window.innerWidth,
+      height: window.innerHeight,
+      dpr: window.devicePixelRatio || 1,
+      effectiveDPR: this.pixelRatio || 1,
+      assetsLoaded: assetLoader.loadedCount || 0,
+      totalAssets: assetLoader.totalCount || 0,
+      failedAssets: assetLoader.failedAssets || [],
+      jsErrors: this.jsErrors,
+      drawCalls: this.renderer ? this.renderer.info.render.calls : 0,
+      triangles: this.renderer ? this.renderer.info.render.triangles : 0,
+      geometries: this.renderer ? this.renderer.info.memory.geometries : 0,
+      textures: this.renderer ? this.renderer.info.memory.textures : 0,
+      contextState: this.contextState
+    };
+  }
+
   async init() {
-    this.initScene();
     uiManager.init();
     this.initInput();
 
+    // REQUIREMENT 4: Mandatory WebGL 2 Check
+    if (!WebGL.isWebGL2Available()) {
+      uiManager.showWebGLError('WebGL 2 is not supported on this device/browser.');
+      uiManager.showDiagnostics(this.getDiagnosticInfo());
+      return false;
+    }
+
+    this.initScene();
+
+    let assetsLoadedSuccessfully = false;
     try {
       await assetLoader.loadAll((progress, text) => {
         uiManager.updateLoading(progress, text);
+        uiManager.updateDiagnostics(this.getDiagnosticInfo());
       });
-
-      this.player = new Player(this.scene);
-      this.player.init();
-
-      this.player.onJump = () => audioManager.playJump();
-      this.player.onLand = () => audioManager.playLand();
-      this.player.onSlide = () => audioManager.playSlide();
-
-      this.world = new World(this.scene);
-      this.world.init();
-
-      this.obstacleManager = new ObstacleManager(this.scene);
-      this.coinManager = new CoinManager(this.scene);
-      this.gateManager = new GateManager(this.scene);
-      this.dog = new DogChase(this.scene);
+      assetsLoadedSuccessfully = true;
     } catch (err) {
-      console.error('[Game] Initialization Error:', err);
-    } finally {
-      uiManager.hideLoading();
-      this.state = GameState.MENU;
-      uiManager.showStartScreen(
-        () => this.startRun(),
-        () => audioManager.toggleMute()
-      );
+      console.error('[Game] Required asset loading failure:', err);
+      this.jsErrors.push(err.message || String(err));
+      uiManager.showDiagnostics(this.getDiagnosticInfo());
     }
 
+    if (!assetsLoadedSuccessfully) {
+      uiManager.hideLoading();
+      uiManager.showDiagnostics(this.getDiagnosticInfo());
+      return false;
+    }
+
+    this.player = new Player(this.scene);
+    this.player.init();
+
+    this.player.onJump = () => audioManager.playJump();
+    this.player.onLand = () => audioManager.playLand();
+    this.player.onSlide = () => audioManager.playSlide();
+
+    this.world = new World(this.scene);
+    this.world.init();
+
+    this.obstacleManager = new ObstacleManager(this.scene);
+    this.coinManager = new CoinManager(this.scene);
+    this.gateManager = new GateManager(this.scene);
+    this.dog = new DogChase(this.scene);
+
+    uiManager.hideLoading();
+    this.state = GameState.MENU;
+    uiManager.showStartScreen(
+      () => this.startRun(),
+      () => audioManager.toggleMute()
+    );
+
     window.addEventListener('resize', this.onWindowResize.bind(this));
-    this.animate();
+
+    // REQUIREMENT 9: Single Animation Loop using setAnimationLoop
+    this.renderer.setAnimationLoop(this.animate.bind(this));
+    return true;
   }
 
   initScene() {
@@ -123,29 +192,65 @@ export class Game {
     this.camera.position.set(0, CONFIG.CAMERA.OFFSET_Y, CONFIG.CAMERA.OFFSET_Z);
     this.camera.lookAt(0, CONFIG.CAMERA.LOOK_Y, CONFIG.CAMERA.LOOK_Z);
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    // REQUIREMENT 3: Mobile Renderer Settings & Capped DPR
+    this.renderer = new THREE.WebGLRenderer({
+      antialias: !this.isMobile,
+      powerPreference: 'high-performance',
+      preserveDrawingBuffer: false,
+      logarithmicDepthBuffer: false,
+      stencil: false,
+      depth: true
+    });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.setPixelRatio(this.pixelRatio);
+
+    // REQUIREMENT 7: Mobile Shadows
+    if (this.isMobile) {
+      this.renderer.shadowMap.enabled = false;
+    } else {
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    }
+
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.2;
     document.body.appendChild(this.renderer.domElement);
 
+    // REQUIREMENT 5: Context Loss Event Handlers
+    const canvas = this.renderer.domElement;
+    canvas.addEventListener('webglcontextlost', (event) => {
+      event.preventDefault();
+      console.warn('[Game] WebGL context lost!');
+      this.contextState = 'LOST';
+      if (this.state === GameState.PLAYING) {
+        this.state = GameState.PAUSED;
+      }
+      uiManager.showDiagnostics(this.getDiagnosticInfo());
+    });
+
+    canvas.addEventListener('webglcontextrestored', () => {
+      console.log('[Game] WebGL context restored.');
+      this.contextState = 'RESTORED';
+      uiManager.showDiagnostics(this.getDiagnosticInfo());
+    });
+
+    // REQUIREMENT 8: Lightweight Mobile Lighting Setup
     this.hemiLight = new THREE.HemisphereLight(0xcbe5ff, 0x1a2436, 2.2);
     this.scene.add(this.hemiLight);
 
     const sun = new THREE.DirectionalLight(0xffedd4, 3.2);
     sun.position.set(22, 38, 16);
-    sun.castShadow = true;
-    sun.shadow.mapSize.width = 1024;
-    sun.shadow.mapSize.height = 1024;
-    sun.shadow.camera.near = 0.5;
-    sun.shadow.camera.far = 120;
-    sun.shadow.camera.left = -20;
-    sun.shadow.camera.right = 20;
-    sun.shadow.camera.top = 25;
-    sun.shadow.camera.bottom = -15;
+    if (!this.isMobile) {
+      sun.castShadow = true;
+      sun.shadow.mapSize.width = 1024;
+      sun.shadow.mapSize.height = 1024;
+      sun.shadow.camera.near = 0.5;
+      sun.shadow.camera.far = 120;
+      sun.shadow.camera.left = -20;
+      sun.shadow.camera.right = 20;
+      sun.shadow.camera.top = 25;
+      sun.shadow.camera.bottom = -15;
+    }
     this.scene.add(sun);
   }
 
@@ -565,20 +670,46 @@ export class Game {
   }
 
   animate() {
-    requestAnimationFrame(this.animate.bind(this));
     const delta = Math.min(this.clock.getDelta(), 0.05);
 
-    this.update(delta);
-    this.renderer.render(this.scene, this.camera);
+    if (this.contextState !== 'LOST') {
+      this.update(delta);
+      if (this.renderer && this.scene && this.camera) {
+        this.renderer.render(this.scene, this.camera);
+      }
+    }
+
+    uiManager.updateDiagnostics(this.getDiagnosticInfo());
   }
 
   onWindowResize() {
     if (!this.camera || !this.renderer) return;
 
-    this.camera.aspect = window.innerWidth / window.innerHeight;
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    if (width === this.lastWidth && height === this.lastHeight) return;
+
+    this.lastWidth = width;
+    this.lastHeight = height;
+
+    this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
 
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setSize(width, height);
+    this.renderer.setPixelRatio(this.pixelRatio);
+  }
+
+  // Requirement 6: Renderer Context Loss Testing Helpers
+  testContextLoss() {
+    if (this.renderer) {
+      this.renderer.forceContextLoss();
+    }
+  }
+
+  testContextRestore() {
+    if (this.renderer) {
+      this.renderer.forceContextRestore();
+    }
   }
 }

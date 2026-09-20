@@ -17,53 +17,58 @@ class AssetLoader {
    * @param {function(number, string)} onProgress - (progress 0..1, currentTask)
    */
   async loadAll(onProgress = () => {}) {
+    this.failedAssets = [];
+    this.loadedCount = 0;
+    this.totalCount = 0;
+
     const assetManifest = [
-      // 1. Character & Animations (FBX)
-      { id: 'remy', type: 'fbx', path: '/assets/characters/Remy.fbx', desc: 'Character Model' },
-      { id: 'anim_run', type: 'fbx', path: '/assets/characters/Running.fbx', desc: 'Running Animation' },
-      { id: 'anim_jump', type: 'fbx', path: '/assets/characters/Jumping.fbx', desc: 'Jumping Animation' },
-      { id: 'anim_slide', type: 'fbx', path: '/assets/characters/Running Slide.fbx', desc: 'Slide Animation' },
+      // 1. Character & Animations (FBX) - REQUIRED
+      { id: 'remy', type: 'fbx', path: '/assets/characters/Remy.fbx', desc: 'Character Model', required: true },
+      { id: 'anim_run', type: 'fbx', path: '/assets/characters/Running.fbx', desc: 'Running Animation', required: true },
+      { id: 'anim_jump', type: 'fbx', path: '/assets/characters/Jumping.fbx', desc: 'Jumping Animation', required: true },
+      { id: 'anim_slide', type: 'fbx', path: '/assets/characters/Running Slide.fbx', desc: 'Slide Animation', required: true },
 
-      // 2. Track GLB
-      { id: 'track_rail', type: 'gltf', path: '/assets/trains/Models/GLB format/railroad-straight.glb', desc: 'Railway Track' },
+      // 2. Track GLB - REQUIRED
+      { id: 'track_rail', type: 'gltf', path: '/assets/trains/Models/GLB format/railroad-straight.glb', desc: 'Railway Track', required: true },
 
-      // 3. Train GLBs
-      { id: 'train_diesel', type: 'gltf', path: '/assets/trains/Models/GLB format/train-diesel-a.glb', desc: 'Diesel Locomotive' },
-      { id: 'train_bullet', type: 'gltf', path: '/assets/trains/Models/GLB format/train-electric-bullet-a.glb', desc: 'Bullet Train' },
-      { id: 'train_carriage', type: 'gltf', path: '/assets/trains/Models/GLB format/train-carriage-container-blue.glb', desc: 'Train Carriage' },
+      // 3. Train GLBs - OPTIONAL (fallback to group if missing)
+      { id: 'train_diesel', type: 'gltf', path: '/assets/trains/Models/GLB format/train-diesel-a.glb', desc: 'Diesel Locomotive', required: false },
+      { id: 'train_bullet', type: 'gltf', path: '/assets/trains/Models/GLB format/train-electric-bullet-a.glb', desc: 'Bullet Train', required: false },
+      { id: 'train_carriage', type: 'gltf', path: '/assets/trains/Models/GLB format/train-carriage-container-blue.glb', desc: 'Train Carriage', required: false },
 
       // 4. Obstacle GLBs
-      { id: 'barrier', type: 'gltf', path: '/assets/environment/Models/GLB format/construction-barrier.glb', desc: 'Road Barrier' },
-      { id: 'container', type: 'gltf', path: '/assets/environment/Models/GLB format/shipping-container-a.glb', desc: 'Cargo Container' },
-      { id: 'fence', type: 'gltf', path: '/assets/environment/Models/GLB format/construction-fence.glb', desc: 'Security Fence' },
+      { id: 'barrier', type: 'gltf', path: '/assets/environment/Models/GLB format/construction-barrier.glb', desc: 'Road Barrier', required: true },
+      { id: 'container', type: 'gltf', path: '/assets/environment/Models/GLB format/shipping-container-a.glb', desc: 'Cargo Container', required: false },
+      { id: 'fence', type: 'gltf', path: '/assets/environment/Models/GLB format/construction-fence.glb', desc: 'Security Fence', required: false },
 
       // 5. Knowledge Gate Truss
-      { id: 'gate_truss', type: 'gltf', path: '/assets/environment/Models/GLB format/sign-highway.glb', desc: 'Highway Sign Gantry' },
+      { id: 'gate_truss', type: 'gltf', path: '/assets/environment/Models/GLB format/sign-highway.glb', desc: 'Highway Sign Gantry', required: false },
 
       // 6. City Scenery GLBs
-      { id: 'bldg_skyscraper', type: 'gltf', path: '/assets/buildings/Models/GLB format/building-skyscraper-a.glb', desc: 'Skyscraper' },
-      { id: 'bldg_low', type: 'gltf', path: '/assets/buildings/Models/GLB format/low-detail-building-a.glb', desc: 'Commercial Building' },
-      { id: 'bldg_standard', type: 'gltf', path: '/assets/buildings/Models/GLB format/building-a.glb', desc: 'City Building' },
+      { id: 'bldg_skyscraper', type: 'gltf', path: '/assets/buildings/Models/GLB format/building-skyscraper-a.glb', desc: 'Skyscraper', required: false },
+      { id: 'bldg_low', type: 'gltf', path: '/assets/buildings/Models/GLB format/low-detail-building-a.glb', desc: 'Commercial Building', required: false },
+      { id: 'bldg_standard', type: 'gltf', path: '/assets/buildings/Models/GLB format/building-a.glb', desc: 'City Building', required: false },
 
       // 7. Industrial & Railway Infrastructure Scenery GLBs
-      { id: 'prop_watertower', type: 'gltf', path: '/assets/environment/Models/GLB format/water-tower.glb', desc: 'Water Tower' },
-      { id: 'prop_pole', type: 'gltf', path: '/assets/environment/Models/GLB format/electricity-pole.glb', desc: 'Utility Pole' },
-      { id: 'prop_chimney', type: 'gltf', path: '/assets/environment/Models/GLB format/chimney-basic.glb', desc: 'Factory Chimney' },
-      { id: 'overhead_gantry', type: 'gltf', path: '/assets/environment/Models/GLB format/electricity-pole-wide.glb', desc: 'Railway Catenary Gantry' },
-      { id: 'prop_signal', type: 'gltf', path: '/assets/environment/Models/GLB format/traffic-light.glb', desc: 'Railway Signal' },
+      { id: 'prop_watertower', type: 'gltf', path: '/assets/environment/Models/GLB format/water-tower.glb', desc: 'Water Tower', required: false },
+      { id: 'prop_pole', type: 'gltf', path: '/assets/environment/Models/GLB format/electricity-pole.glb', desc: 'Utility Pole', required: false },
+      { id: 'prop_chimney', type: 'gltf', path: '/assets/environment/Models/GLB format/chimney-basic.glb', desc: 'Factory Chimney', required: false },
+      { id: 'overhead_gantry', type: 'gltf', path: '/assets/environment/Models/GLB format/electricity-pole-wide.glb', desc: 'Railway Catenary Gantry', required: false },
+      { id: 'prop_signal', type: 'gltf', path: '/assets/environment/Models/GLB format/traffic-light.glb', desc: 'Railway Signal', required: false },
 
       // 8. Nature & Biome Scenery GLBs
-      { id: 'tree_default', type: 'gltf', path: '/assets/environment/Models/GLTF format/tree_default.glb', desc: 'Pine Tree' },
-      { id: 'plant_bush', type: 'gltf', path: '/assets/environment/Models/GLTF format/plant_bush.glb', desc: 'Foliage Bush' },
-      { id: 'rock_desert', type: 'gltf', path: '/assets/environment/Models/GLTF format/stone_tallA.glb', desc: 'Desert Rock' },
-      { id: 'tree_palm', type: 'gltf', path: '/assets/environment/Models/GLTF format/tree_palm.glb', desc: 'Coastal Palm' }
+      { id: 'tree_default', type: 'gltf', path: '/assets/environment/Models/GLTF format/tree_default.glb', desc: 'Pine Tree', required: false },
+      { id: 'plant_bush', type: 'gltf', path: '/assets/environment/Models/GLTF format/plant_bush.glb', desc: 'Foliage Bush', required: false },
+      { id: 'rock_desert', type: 'gltf', path: '/assets/environment/Models/GLTF format/stone_tallA.glb', desc: 'Desert Rock', required: false },
+      { id: 'tree_palm', type: 'gltf', path: '/assets/environment/Models/GLTF format/tree_palm.glb', desc: 'Coastal Palm', required: false }
     ];
 
-    const total = assetManifest.length;
-    let completed = 0;
+    this.totalCount = assetManifest.length;
+    this.loadedCount = 0;
+    this.failedAssets = [];
 
     for (const item of assetManifest) {
-      onProgress((completed / total), `Loading ${item.desc}...`);
+      onProgress((this.loadedCount / this.totalCount), `Loading ${item.desc}...`);
       try {
         if (item.type === 'fbx') {
           const fbx = await this.fbxLoader.loadAsync(item.path);
@@ -85,12 +90,15 @@ class AssetLoader {
           this.optimizeModel(gltf.scene);
           this.cache.set(item.id, gltf.scene);
         }
+        this.loadedCount++;
       } catch (err) {
-        console.error(`[AssetLoader] Failed to load asset: ${item.path}`, err);
-        throw new Error(`Failed to load ${item.desc} at ${item.path}: ${err.message}`);
+        console.warn(`[AssetLoader] Failed asset (${item.required ? 'REQUIRED' : 'OPTIONAL'}): ${item.path}`, err);
+        this.failedAssets.push(item.path);
+        if (item.required) {
+          throw new Error(`REQUIRED asset failed: ${item.path}`);
+        }
       }
-      completed++;
-      onProgress((completed / total), `Loaded ${item.desc}`);
+      onProgress((this.loadedCount / this.totalCount), `Loaded ${item.desc}`);
     }
 
     onProgress(1.0, 'All assets loaded successfully!');
