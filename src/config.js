@@ -27,13 +27,16 @@ export const CONFIG = {
   PLAYER_SCALE: 0.004624,
 
   // World Segments & Endless Track
+  // Calculated to guarantee ZERO horizon popping:
+  // camera.far = 400m, fog density = 0.0095 (visibility < 4% at 335m).
+  // 9 segments * 40m = 360m continuous forward span from recycle threshold (+25m) to -335m.
   SEGMENT_LENGTH: 40.0,
-  NUM_SEGMENTS: 5,     // 5 segments cover Z = -160 to +40
+  NUM_SEGMENTS: 9,
   RECYCLE_Z: 25.0,
 
   // Obstacle Spawning
   OBSTACLE_MIN_DIST: 28.0,
-  OBSTACLE_SPAWN_Z: -160.0,
+  OBSTACLE_SPAWN_Z: -200.0,
   TRAIN_SPEED_OFFSET: 10.0,
 
   // Knowledge Gate Question Trigger Distance

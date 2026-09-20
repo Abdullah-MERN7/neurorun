@@ -71,9 +71,30 @@
             <div id="hud-distance" class="stat-value">0m</div>
           </div>
 
+          <div class="hud-stat-box" style="text-align: center;">
+            <div class="stat-label">COINS</div>
+            <div class="stat-value yellow"><span style="color: #ffd700;">🪙</span> <span id="hud-coins">0</span></div>
+          </div>
+
           <div id="hud-combo-badge" class="combo-badge">
             <div class="stat-label" style="color: var(--accent-purple);">COMBO</div>
             <div id="hud-combo" class="combo-text">x1</div>
+          </div>
+        </div>
+
+        <!-- HUD Center Banner: Active Power-up & Dog Threat Meter -->
+        <div class="hud-status-strip">
+          <div id="hud-powerup" class="powerup-indicator-pill" style="display: none;">
+            <span id="powerup-icon" class="powerup-ico">⚡</span>
+            <span id="powerup-name" class="powerup-title">NEURAL RUSH</span>
+            <div class="powerup-progress-wrap">
+              <div id="powerup-progress-bar" class="powerup-progress-bar"></div>
+            </div>
+          </div>
+
+          <div id="hud-dog-threat" class="dog-threat-pill dog-safe">
+            <span class="dog-ico">🐕</span>
+            <span id="dog-threat-text">DOG: 40m SAFE</span>
           </div>
         </div>
 
@@ -89,35 +110,34 @@
         </div>
       </div>
 
-      <!-- Dedicated Question Pause Modal Screen -->
+      <!-- Dedicated Question Pause Modal Screen (NO Submit button, 1-click / Key 1/2/3 auto submit) -->
       <div id="question-screen" class="interactive">
         <div class="question-modal-box">
           <div class="question-header">
-            <span id="modal-q-category" class="q-badge">JAVASCRIPT</span>
+            <span id="modal-q-category" class="q-badge">WEB DEVELOPMENT</span>
             <span class="q-pause-indicator">GAME FROZEN FOR KNOWLEDGE GATE</span>
           </div>
 
-          <h2 id="modal-q-text" class="modal-question-text">Which keyword declares a variable in JavaScript?</h2>
+          <h2 id="modal-q-text" class="modal-question-text">Which language is used to style a webpage?</h2>
 
-          <div class="lane-options-grid">
-            <div id="opt-card-0" class="lane-option-card">
-              <span class="opt-lane-header"><span class="opt-key-tag">1</span> LEFT LANE</span>
-              <span id="opt-text-0" class="opt-answer-title">Option 1</span>
-            </div>
-            <div id="opt-card-1" class="lane-option-card">
-              <span class="opt-lane-header"><span class="opt-key-tag">2</span> CENTER LANE</span>
-              <span id="opt-text-1" class="opt-answer-title">Option 2</span>
-            </div>
-            <div id="opt-card-2" class="lane-option-card">
-              <span class="opt-lane-header"><span class="opt-key-tag">3</span> RIGHT LANE</span>
-              <span id="opt-text-2" class="opt-answer-title">Option 3</span>
-            </div>
+          <div class="question-answers-stack">
+            <button id="opt-card-0" class="answer-option-btn" data-index="0">
+              <span class="opt-key-tag">1</span>
+              <span id="opt-text-0" class="opt-answer-title">Answer 1</span>
+            </button>
+            <button id="opt-card-1" class="answer-option-btn" data-index="1">
+              <span class="opt-key-tag">2</span>
+              <span id="opt-text-1" class="opt-answer-title">Answer 2</span>
+            </button>
+            <button id="opt-card-2" class="answer-option-btn" data-index="2">
+              <span class="opt-key-tag">3</span>
+              <span id="opt-text-2" class="opt-answer-title">Answer 3</span>
+            </button>
           </div>
 
           <p class="modal-footer-hint">
-            Press <kbd>A/D</kbd> or <kbd>1/2/3</kbd> to steer &bull; Press <kbd>ENTER</kbd> / <kbd>SPACE</kbd> or click to submit
+            Press <kbd>1</kbd>, <kbd>2</kbd>, or <kbd>3</kbd> &bull; Or click answer to submit immediately
           </p>
-          <button id="btn-submit-answer" class="btn-confirm-answer">SUBMIT ANSWER</button>
         </div>
       </div>
 
@@ -125,7 +145,7 @@
       <div id="pause-screen" class="screen-modal interactive" style="display: none;">
         <div class="modal-content pause-modal-card">
           <h1 class="game-title-large pause-title">PAUSED</h1>
-          <p class="game-tagline-sub">TAKE A BREATHER, RUNNER</p>
+          <p class="game-tagline-sub">GAME FROZEN</p>
           <div class="modal-btn-stack">
             <button id="btn-resume" class="btn-game-primary">RESUME RUN</button>
             <button id="btn-pause-restart" class="btn-game-secondary">RESTART RUN</button>
@@ -136,8 +156,8 @@
       <!-- Game Over / Crashed Screen -->
       <div id="gameover-screen" class="screen-modal interactive" style="display: none;">
         <div class="modal-content crashed-modal-card">
-          <h1 class="crashed-heading">CRASHED!</h1>
-          <p class="game-tagline-sub analytics-tag">RUN ANALYTICS</p>
+          <h1 id="go-heading" class="crashed-heading">CRASHED!</h1>
+          <p id="go-subheading" class="game-tagline-sub analytics-tag">RUN ANALYTICS</p>
 
           <div class="analytics-card-grid">
             <div class="analytic-item">
@@ -147,6 +167,10 @@
             <div class="analytic-item">
               <span class="analytic-label">Distance</span>
               <span id="go-distance" class="analytic-val cyan">0m</span>
+            </div>
+            <div class="analytic-item">
+              <span class="analytic-label">Coins</span>
+              <span id="go-coins" class="analytic-val yellow">0</span>
             </div>
             <div class="analytic-item">
               <span class="analytic-label">Knowledge Gates</span>

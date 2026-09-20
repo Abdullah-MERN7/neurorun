@@ -45,14 +45,18 @@ class AssetLoader {
       { id: 'bldg_low', type: 'gltf', path: '/assets/buildings/Models/GLB format/low-detail-building-a.glb', desc: 'Commercial Building' },
       { id: 'bldg_standard', type: 'gltf', path: '/assets/buildings/Models/GLB format/building-a.glb', desc: 'City Building' },
 
-      // 7. Industrial Scenery GLBs
+      // 7. Industrial & Railway Infrastructure Scenery GLBs
       { id: 'prop_watertower', type: 'gltf', path: '/assets/environment/Models/GLB format/water-tower.glb', desc: 'Water Tower' },
       { id: 'prop_pole', type: 'gltf', path: '/assets/environment/Models/GLB format/electricity-pole.glb', desc: 'Utility Pole' },
       { id: 'prop_chimney', type: 'gltf', path: '/assets/environment/Models/GLB format/chimney-basic.glb', desc: 'Factory Chimney' },
+      { id: 'overhead_gantry', type: 'gltf', path: '/assets/environment/Models/GLB format/electricity-pole-wide.glb', desc: 'Railway Catenary Gantry' },
+      { id: 'prop_signal', type: 'gltf', path: '/assets/environment/Models/GLB format/traffic-light.glb', desc: 'Railway Signal' },
 
-      // 8. Nature Scenery GLBs
+      // 8. Nature & Biome Scenery GLBs
       { id: 'tree_default', type: 'gltf', path: '/assets/environment/Models/GLTF format/tree_default.glb', desc: 'Pine Tree' },
-      { id: 'plant_bush', type: 'gltf', path: '/assets/environment/Models/GLTF format/plant_bush.glb', desc: 'Foliage Bush' }
+      { id: 'plant_bush', type: 'gltf', path: '/assets/environment/Models/GLTF format/plant_bush.glb', desc: 'Foliage Bush' },
+      { id: 'rock_desert', type: 'gltf', path: '/assets/environment/Models/GLTF format/stone_tallA.glb', desc: 'Desert Rock' },
+      { id: 'tree_palm', type: 'gltf', path: '/assets/environment/Models/GLTF format/tree_palm.glb', desc: 'Coastal Palm' }
     ];
 
     const total = assetManifest.length;

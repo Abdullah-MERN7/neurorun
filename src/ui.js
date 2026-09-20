@@ -25,9 +25,19 @@ export class UIManager {
       hud: document.getElementById('hud'),
       scoreVal: document.getElementById('hud-score'),
       distVal: document.getElementById('hud-distance'),
+      coinsVal: document.getElementById('hud-coins'),
       comboBadge: document.getElementById('hud-combo-badge'),
       comboVal: document.getElementById('hud-combo'),
       speedVal: document.getElementById('hud-speed'),
+
+      // Power-up & Dog Threat
+      hudPowerup: document.getElementById('hud-powerup'),
+      powerupIcon: document.getElementById('powerup-icon'),
+      powerupName: document.getElementById('powerup-name'),
+      powerupProgressBar: document.getElementById('powerup-progress-bar'),
+
+      hudDogThreat: document.getElementById('hud-dog-threat'),
+      dogThreatText: document.getElementById('dog-threat-text'),
 
       // Question Pause Modal
       questionScreen: document.getElementById('question-screen'),
@@ -43,7 +53,6 @@ export class UIManager {
         document.getElementById('opt-text-1'),
         document.getElementById('opt-text-2')
       ],
-      btnSubmitAnswer: document.getElementById('btn-submit-answer'),
 
       // Pause Screen
       pauseScreen: document.getElementById('pause-screen'),
@@ -52,9 +61,12 @@ export class UIManager {
 
       // Game Over Screen
       gameoverScreen: document.getElementById('gameover-screen'),
+      goHeading: document.getElementById('go-heading'),
+      goSubheading: document.getElementById('go-subheading'),
       goScore: document.getElementById('go-score'),
       goHighscore: document.getElementById('go-highscore'),
       goDistance: document.getElementById('go-distance'),
+      goCoins: document.getElementById('go-coins'),
       goCorrect: document.getElementById('go-correct'),
       goAccuracy: document.getElementById('go-accuracy'),
       goCombo: document.getElementById('go-combo'),
@@ -107,12 +119,15 @@ export class UIManager {
     }
   }
 
-  updateHUD(score, distance, combo, speed) {
+  updateHUD(score, distance, coins, combo, speed) {
     if (this.elements.scoreVal) {
       this.elements.scoreVal.textContent = Math.floor(score).toLocaleString();
     }
     if (this.elements.distVal) {
       this.elements.distVal.textContent = `${Math.floor(distance)}m`;
+    }
+    if (this.elements.coinsVal) {
+      this.elements.coinsVal.textContent = Math.floor(coins).toLocaleString();
     }
     if (this.elements.speedVal) {
       this.elements.speedVal.textContent = `${Math.floor(speed * 3.6)} km/h`;
@@ -127,50 +142,94 @@ export class UIManager {
     }
   }
 
+  updatePowerup(powerup) {
+    if (!this.elements.hudPowerup) return;
+    if (!powerup || powerup.remaining <= 0) {
+      this.elements.hudPowerup.style.display = 'none';
+      return;
+    }
+
+    this.elements.hudPowerup.style.display = 'flex';
+    if (this.elements.powerupIcon) {
+      this.elements.powerupIcon.textContent = powerup.icon || '⚡';
+    }
+    if (this.elements.powerupName) {
+      this.elements.powerupName.textContent = powerup.name || 'POWER-UP';
+    }
+    if (this.elements.powerupProgressBar) {
+      const ratio = Math.max(0, Math.min(1, powerup.remaining / powerup.duration));
+      this.elements.powerupProgressBar.style.width = `${Math.round(ratio * 100)}%`;
+    }
+  }
+
+  updateDogThreat(state, distance) {
+    if (!this.elements.hudDogThreat) return;
+
+    this.elements.hudDogThreat.className = 'dog-threat-pill';
+
+    if (state === 'CAUGHT') {
+      this.elements.hudDogThreat.classList.add('dog-caught');
+      this.elements.dogThreatText.textContent = 'CAUGHT!';
+    } else if (state === 'DANGER' || distance <= 25.0) {
+      this.elements.hudDogThreat.classList.add('dog-danger');
+      this.elements.dogThreatText.textContent = `DOG: ${Math.round(distance)}m DANGER`;
+    } else {
+      this.elements.hudDogThreat.classList.add('dog-safe');
+      this.elements.dogThreatText.textContent = `DOG: ${Math.round(distance)}m SAFE`;
+    }
+  }
+
   /**
    * Display the Question Pause Modal while game is frozen.
+   * Clicking an answer or keyboard 1/2/3 immediately submits it.
    */
-  showQuestionModal(question, selectedLaneIndex, onSelectLane, onSubmit) {
+  showQuestionModal(question, onSubmitAnswer) {
     if (!this.elements.questionScreen || !question) return;
 
     this.elements.modalCategory.textContent = question.category || 'KNOWLEDGE GATE';
     this.elements.modalQText.textContent = question.question;
 
+    let answered = false;
+
     for (let i = 0; i < 3; i++) {
+      const card = this.elements.optCards[i];
       if (this.elements.optTexts[i]) {
         this.elements.optTexts[i].textContent = question.options[i];
       }
-      const card = this.elements.optCards[i];
       if (card) {
+        card.className = 'answer-option-btn';
+        card.disabled = false;
         card.onclick = () => {
-          if (onSelectLane) onSelectLane(i);
-          if (onSubmit) onSubmit(i);
+          if (answered) return;
+          answered = true;
+          this.handleAnswerSelection(i, question.correctIndex, onSubmitAnswer);
         };
       }
-    }
-
-    this.highlightQuestionChoice(selectedLaneIndex);
-
-    if (this.elements.btnSubmitAnswer) {
-      this.elements.btnSubmitAnswer.onclick = () => {
-        if (onSubmit) onSubmit();
-      };
     }
 
     this.elements.questionScreen.style.display = 'flex';
   }
 
-  highlightQuestionChoice(index) {
+  handleAnswerSelection(selectedIndex, correctIndex, callback) {
+    const isCorrect = selectedIndex === correctIndex;
+
+    // Visual feedback on the chosen card
     for (let i = 0; i < 3; i++) {
       const card = this.elements.optCards[i];
-      if (card) {
-        if (i === index) {
-          card.classList.add('active-choice');
-        } else {
-          card.classList.remove('active-choice');
-        }
+      if (!card) continue;
+      card.disabled = true;
+      if (i === selectedIndex) {
+        card.classList.add(isCorrect ? 'correct-choice' : 'wrong-choice');
+      } else if (i === correctIndex && !isCorrect) {
+        card.classList.add('correct-choice');
       }
     }
+
+    // Give player brief visual feedback before auto resuming
+    setTimeout(() => {
+      this.hideQuestionModal();
+      if (callback) callback(selectedIndex, isCorrect);
+    }, 450);
   }
 
   hideQuestionModal() {
@@ -208,11 +267,22 @@ export class UIManager {
     }
   }
 
-  showGameOver(stats, onRestart) {
+  showGameOver(stats, onRestart, cause = 'CRASHED') {
     if (!this.elements.gameoverScreen) return;
 
     this.hideHUD();
     this.hideQuestionModal();
+
+    if (this.elements.goHeading) {
+      this.elements.goHeading.textContent = cause === 'CAUGHT' ? 'CAUGHT!' : 'CRASHED!';
+      this.elements.goHeading.style.color = cause === 'CAUGHT' ? '#ef4444' : '#ff4444';
+    }
+
+    if (this.elements.goSubheading) {
+      this.elements.goSubheading.textContent = cause === 'CAUGHT'
+        ? 'PURSUIT DOG CAUGHT REMY'
+        : 'RUN ANALYTICS';
+    }
 
     if (stats.score > this.highScore) {
       this.highScore = Math.floor(stats.score);
@@ -222,6 +292,9 @@ export class UIManager {
     this.elements.goScore.textContent = Math.floor(stats.score).toLocaleString();
     this.elements.goHighscore.textContent = this.highScore.toLocaleString();
     this.elements.goDistance.textContent = `${Math.floor(stats.distance)}m`;
+    if (this.elements.goCoins) {
+      this.elements.goCoins.textContent = Math.floor(stats.coins || 0).toLocaleString();
+    }
     this.elements.goCorrect.textContent = `${stats.correctAnswers} / ${stats.totalQuestions}`;
 
     const acc = stats.totalQuestions > 0

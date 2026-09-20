@@ -9,6 +9,8 @@ class AudioManager {
     // Cache HTML5 Audio objects
     this.sounds = {};
     this.footstepTimer = 0;
+    this.consecutiveCoins = 0;
+    this.lastCoinTime = 0;
 
     this.initAudioList();
   }
@@ -117,6 +119,134 @@ class AudioManager {
 
   playImpact() {
     this.play('impact', 0.85);
+  }
+
+  playCoinPickup() {
+    if (this.isMuted) return;
+    this.unlock();
+    if (!this.audioContext) return;
+
+    try {
+      const now = this.audioContext.currentTime;
+
+      // Track consecutive coin pickups within 0.8 seconds
+      if (now - this.lastCoinTime < 0.8) {
+        this.consecutiveCoins = Math.min(8, this.consecutiveCoins + 1);
+      } else {
+        this.consecutiveCoins = 0;
+      }
+      this.lastCoinTime = now;
+
+      // Pitch multiplier based on streak (1.0 to ~1.3)
+      const pitchMultiplier = 1.0 + this.consecutiveCoins * 0.035;
+
+      // Tone 1: Bright ping
+      const osc1 = this.audioContext.createOscillator();
+      const gain1 = this.audioContext.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(987.77 * pitchMultiplier, now); // B5
+      gain1.gain.setValueAtTime(0.18, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+
+      osc1.connect(gain1);
+      gain1.connect(this.audioContext.destination);
+
+      osc1.start(now);
+      osc1.stop(now + 0.06);
+
+      // Tone 2: Higher ping slightly delayed
+      const osc2 = this.audioContext.createOscillator();
+      const gain2 = this.audioContext.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(1318.51 * pitchMultiplier, now + 0.04); // E6
+      gain2.gain.setValueAtTime(0.0001, now);
+      gain2.gain.setValueAtTime(0.22, now + 0.04);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+
+      osc2.connect(gain2);
+      gain2.connect(this.audioContext.destination);
+
+      osc2.start(now + 0.04);
+      osc2.stop(now + 0.16);
+    } catch {}
+  }
+
+  playPowerUp() {
+    if (this.isMuted) return;
+    this.unlock();
+    if (!this.audioContext) return;
+
+    try {
+      const now = this.audioContext.currentTime;
+      const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+      notes.forEach((freq, idx) => {
+        const osc = this.audioContext.createOscillator();
+        const gain = this.audioContext.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.05);
+
+        gain.gain.setValueAtTime(0.001, now + idx * 0.05);
+        gain.gain.linearRampToValueAtTime(0.2, now + idx * 0.05 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.05 + 0.18);
+
+        osc.connect(gain);
+        gain.connect(this.audioContext.destination);
+        osc.start(now + idx * 0.05);
+        osc.stop(now + idx * 0.05 + 0.18);
+      });
+    } catch {}
+  }
+
+  playShieldBreak() {
+    if (this.isMuted) return;
+    this.unlock();
+    if (!this.audioContext) return;
+
+    try {
+      const now = this.audioContext.currentTime;
+      const osc = this.audioContext.createOscillator();
+      const gain = this.audioContext.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(440, now);
+      osc.frequency.exponentialRampToValueAtTime(120, now + 0.2);
+
+      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
+      osc.connect(gain);
+      gain.connect(this.audioContext.destination);
+      osc.start(now);
+      osc.stop(now + 0.22);
+    } catch {}
+  }
+
+  playDogGrowl() {
+    if (this.isMuted) return;
+    this.unlock();
+    if (!this.audioContext) return;
+
+    try {
+      const now = this.audioContext.currentTime;
+      const osc = this.audioContext.createOscillator();
+      const gain = this.audioContext.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(140, now);
+      osc.frequency.linearRampToValueAtTime(110, now + 0.18);
+      osc.frequency.linearRampToValueAtTime(90, now + 0.35);
+
+      gain.gain.setValueAtTime(0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+
+      osc.connect(gain);
+      gain.connect(this.audioContext.destination);
+      osc.start(now);
+      osc.stop(now + 0.4);
+    } catch {}
+  }
+
+  playDogCatch() {
+    this.playImpact();
+    this.playGameOver();
   }
 
   playCorrect() {

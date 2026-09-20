@@ -78,11 +78,69 @@ export class Player {
     }
 
     this.playAnimation('run', 0.1);
+
+    this.playAnimation('run', 0.1);
+
+    // ============================================================
+    // NEURAL SHIELD: Clean Endless-Runner Energy Ring Aura
+    // Thin green/cyan circular aura centered around Remy's body,
+    // player remains 100% visible, subtle rotation and pulse.
+    // ============================================================
+    this.shieldMesh = new THREE.Group();
+
+    // 1. Primary outer energy ring at waist height (y = 0.85m)
+    const ring1Geo = new THREE.TorusGeometry(0.68, 0.022, 16, 48);
+    const ring1Mat = new THREE.MeshBasicMaterial({
+      color: 0x00ffaa,
+      transparent: true,
+      opacity: 0.85
+    });
+    this.shieldRing1 = new THREE.Mesh(ring1Geo, ring1Mat);
+    this.shieldRing1.rotation.x = Math.PI / 2;
+    this.shieldRing1.position.y = 0.85;
+    this.shieldMesh.add(this.shieldRing1);
+
+    // 2. Secondary inner concentric energy ring
+    const ring2Geo = new THREE.TorusGeometry(0.55, 0.014, 16, 40);
+    const ring2Mat = new THREE.MeshBasicMaterial({
+      color: 0x00e5ff,
+      transparent: true,
+      opacity: 0.65
+    });
+    this.shieldRing2 = new THREE.Mesh(ring2Geo, ring2Mat);
+    this.shieldRing2.rotation.x = Math.PI / 2;
+    this.shieldRing2.position.y = 0.85;
+    this.shieldMesh.add(this.shieldRing2);
+
+    // 3. Soft glowing ground aura ring slightly above the road/ballast
+    const groundRingGeo = new THREE.RingGeometry(0.46, 0.72, 32);
+    const groundRingMat = new THREE.MeshBasicMaterial({
+      color: 0x00ffaa,
+      transparent: true,
+      opacity: 0.28,
+      side: THREE.DoubleSide
+    });
+    this.shieldGroundRing = new THREE.Mesh(groundRingGeo, groundRingMat);
+    this.shieldGroundRing.rotation.x = -Math.PI / 2;
+    this.shieldGroundRing.position.y = 0.04;
+    this.shieldMesh.add(this.shieldGroundRing);
+
+    this.shieldAnimTimer = 0;
+    this.shieldMesh.visible = false;
+    this.scene.add(this.shieldMesh);
+
     this.updateBoundingBox();
   }
 
-  playAnimation(name, fadeDuration = 0.15) {
-    if (this.currentActionName === name || !this.actions[name]) return;
+  setShield(active) {
+    if (this.shieldMesh) {
+      this.shieldMesh.visible = active;
+    }
+  }
+
+  playAnimation(name, fadeDuration = 0.15, force = false) {
+    if (!force && this.currentActionName === name) return;
+    if (!this.actions[name]) return;
 
     const nextAction = this.actions[name];
     const prevAction = this.actions[this.currentActionName];
@@ -91,7 +149,7 @@ export class Player {
     nextAction.fadeIn(fadeDuration);
     nextAction.play();
 
-    if (prevAction) {
+    if (prevAction && prevAction !== nextAction) {
       prevAction.fadeOut(fadeDuration);
     }
 
@@ -203,6 +261,20 @@ export class Player {
 
     this.mesh.position.set(this.position.x, this.position.y, 0);
 
+    if (this.shieldMesh && this.shieldMesh.visible) {
+      this.shieldAnimTimer += delta;
+      this.shieldMesh.position.set(this.position.x, this.position.y, 0);
+
+      // Counter-rotating energy rings
+      this.shieldRing1.rotation.z += delta * 2.2;
+      this.shieldRing2.rotation.z -= delta * 2.8;
+      this.shieldGroundRing.rotation.z += delta * 1.2;
+
+      // Subtle pulse scale
+      const pulse = 1.0 + Math.sin(this.shieldAnimTimer * 3.6) * 0.04;
+      this.shieldMesh.scale.set(pulse, 1.0, pulse);
+    }
+
     if (this.mixer) {
       this.mixer.update(delta);
     }
@@ -239,6 +311,9 @@ export class Player {
     if (this.mesh) {
       this.mesh.position.set(0, 0, 0);
       this.mesh.rotation.z = 0;
+    }
+    if (this.shieldMesh) {
+      this.shieldMesh.visible = false;
     }
     this.playAnimation('run', 0.05);
     this.updateBoundingBox();

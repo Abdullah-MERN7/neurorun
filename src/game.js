@@ -2,12 +2,13 @@ import * as THREE from 'three';
 import { CONFIG } from './config.js';
 import { assetLoader } from './assetLoader.js';
 import { Player, PlayerState } from './player.js';
-import { World } from './world.js';
-import { ObstacleManager } from './obstacles.js';
+import { World, ZONE_ATMOSPHERE, ZoneType } from './world.js';
+import { ObstacleManager, CoinManager } from './obstacles.js';
 import { GateManager } from './gate.js';
 import { InputManager } from './input.js';
 import { uiManager } from './ui.js';
 import { audioManager } from './audio.js';
+import { DogChase } from './dog.js';
 
 export const GameState = {
   LOADING: 'LOADING',
@@ -17,6 +18,13 @@ export const GameState = {
   PAUSED: 'PAUSED',
   GAME_OVER: 'GAME_OVER'
 };
+
+const POWER_UPS = [
+  { id: 'NEURO_MAGNET', name: 'NEURO MAGNET', icon: '🧲', duration: 8.0 },
+  { id: 'NEURAL_RUSH', name: 'NEURAL RUSH', icon: '⚡', duration: 6.0 },
+  { id: 'NEURAL_SHIELD', name: 'NEURAL SHIELD', icon: '🛡️', duration: Infinity },
+  { id: 'DOUBLE_SCORE', name: 'DOUBLE SCORE', icon: '✖️2', duration: 8.0 }
+];
 
 export class Game {
   constructor() {
@@ -30,19 +38,34 @@ export class Game {
     this.player = null;
     this.world = null;
     this.obstacleManager = null;
+    this.coinManager = null;
     this.gateManager = null;
     this.inputManager = null;
+    this.dog = null;
 
     // Runtime gameplay state
     this.speed = CONFIG.INITIAL_SPEED;
     this.score = 0;
     this.distance = 0;
+    this.coins = 0;
     this.combo = 1;
     this.maxCombo = 1;
     this.correctAnswers = 0;
     this.totalQuestions = 0;
 
     this.activeQuestion = null;
+
+    // Power-up state
+    this.activePowerup = null;
+    this.hasShield = false;
+    this.invulnerableTimer = 0;
+    this.targetFov = CONFIG.CAMERA.FOV;
+
+    // Dynamic Biome Atmosphere Interpolation
+    this.targetFogColor = new THREE.Color(0x131a2e);
+    this.targetSkyColor = new THREE.Color(0x131a2e);
+    this.targetHemiColor = new THREE.Color(0xcbe5ff);
+    this.hemiLight = null;
   }
 
   async init() {
@@ -66,7 +89,9 @@ export class Game {
       this.world.init();
 
       this.obstacleManager = new ObstacleManager(this.scene);
+      this.coinManager = new CoinManager(this.scene);
       this.gateManager = new GateManager(this.scene);
+      this.dog = new DogChase(this.scene);
     } catch (err) {
       console.error('[Game] Initialization Error:', err);
     } finally {
@@ -85,9 +110,9 @@ export class Game {
   initScene() {
     this.scene = new THREE.Scene();
 
-    // Stylized twilight sky
+    // Stylized twilight sky with mathematically calculated fog for 9 segments
     this.scene.background = new THREE.Color(0x131a2e);
-    this.scene.fog = new THREE.FogExp2(0x17213b, 0.0075);
+    this.scene.fog = new THREE.FogExp2(0x131a2e, 0.0095);
 
     this.camera = new THREE.PerspectiveCamera(
       CONFIG.CAMERA.FOV,
@@ -107,8 +132,8 @@ export class Game {
     this.renderer.toneMappingExposure = 1.2;
     document.body.appendChild(this.renderer.domElement);
 
-    const hemiLight = new THREE.HemisphereLight(0xcbe5ff, 0x1a2436, 2.2);
-    this.scene.add(hemiLight);
+    this.hemiLight = new THREE.HemisphereLight(0xcbe5ff, 0x1a2436, 2.2);
+    this.scene.add(this.hemiLight);
 
     const sun = new THREE.DirectionalLight(0xffedd4, 3.2);
     sun.position.set(22, 38, 16);
@@ -131,9 +156,6 @@ export class Game {
       audioManager.unlock();
       if (this.state === GameState.PLAYING) {
         this.player.moveLeft();
-      } else if (this.state === GameState.QUESTION) {
-        this.player.moveLeft();
-        uiManager.highlightQuestionChoice(this.player.laneIndex);
       }
     };
 
@@ -141,24 +163,19 @@ export class Game {
       audioManager.unlock();
       if (this.state === GameState.PLAYING) {
         this.player.moveRight();
-      } else if (this.state === GameState.QUESTION) {
-        this.player.moveRight();
-        uiManager.highlightQuestionChoice(this.player.laneIndex);
       }
     };
 
-    this.inputManager.handlers.onDigit = (laneIdx) => {
-      if (this.state === GameState.QUESTION) {
-        this.player.setLane(laneIdx);
-        uiManager.highlightQuestionChoice(laneIdx);
+    this.inputManager.handlers.onDigit = (idx) => {
+      if (this.state === GameState.QUESTION && this.activeQuestion) {
+        // Keyboard 1 / 2 / 3 immediately selects and submits
+        uiManager.handleAnswerSelection(idx, this.activeQuestion.correctIndex, (selectedIdx, isCorrect) => {
+          this.submitQuestionAnswer(selectedIdx, isCorrect);
+        });
       }
     };
 
     this.inputManager.handlers.onConfirm = () => {
-      if (this.state === GameState.QUESTION) {
-        this.submitQuestionAnswer(this.player.laneIndex);
-        return true;
-      }
       return false;
     };
 
@@ -218,19 +235,31 @@ export class Game {
     this.speed = CONFIG.INITIAL_SPEED;
     this.score = 0;
     this.distance = 0;
+    this.coins = 0;
     this.combo = 1;
     this.maxCombo = 1;
     this.correctAnswers = 0;
     this.totalQuestions = 0;
     this.activeQuestion = null;
 
+    this.activePowerup = null;
+    this.hasShield = false;
+    this.invulnerableTimer = 0;
+    this.targetFov = CONFIG.CAMERA.FOV;
+    this.camera.fov = CONFIG.CAMERA.FOV;
+    this.camera.updateProjectionMatrix();
+
     if (this.player) this.player.reset();
     if (this.world) this.world.reset();
     if (this.obstacleManager) this.obstacleManager.reset();
+    if (this.coinManager) this.coinManager.reset();
     if (this.gateManager) this.gateManager.reset();
+    if (this.dog) this.dog.reset();
 
     uiManager.hideQuestionModal();
-    uiManager.updateHUD(0, 0, 1, this.speed);
+    uiManager.updatePowerup(null);
+    uiManager.updateDogThreat('SAFE', 40.0);
+    uiManager.updateHUD(0, 0, 0, 1, this.speed);
   }
 
   triggerQuestionPause(question) {
@@ -238,60 +267,114 @@ export class Game {
     this.player.state = PlayerState.PAUSED_QUESTION;
     this.activeQuestion = question;
 
-    uiManager.showQuestionModal(
-      question,
-      this.player.laneIndex,
-      (selectedIdx) => {
-        this.player.setLane(selectedIdx);
-        uiManager.highlightQuestionChoice(selectedIdx);
-      },
-      (selectedIdx) => {
-        const laneToSubmit = selectedIdx !== undefined ? selectedIdx : this.player.laneIndex;
-        this.submitQuestionAnswer(laneToSubmit);
-      }
-    );
+    // Show modal: clicking or typing 1/2/3 immediately submits answer
+    uiManager.showQuestionModal(question, (selectedIdx, isCorrect) => {
+      this.submitQuestionAnswer(selectedIdx, isCorrect);
+    });
   }
 
-  submitQuestionAnswer(chosenLaneIndex) {
-    if (this.state !== GameState.QUESTION || !this.activeQuestion) return;
+  submitQuestionAnswer(selectedIndex, isCorrect) {
+    if (!this.activeQuestion) return;
 
     this.totalQuestions++;
-    const isCorrect = chosenLaneIndex === this.activeQuestion.correctIndex;
+    const isDouble = this.activePowerup && this.activePowerup.id === 'DOUBLE_SCORE';
 
     if (isCorrect) {
       audioManager.playCorrect();
       uiManager.triggerFlash(true);
 
       this.correctAnswers++;
-      this.score += CONFIG.SCORE.GATE_CORRECT * this.combo;
+      const bonusScore = CONFIG.SCORE.GATE_CORRECT * this.combo * (isDouble ? 2 : 1);
+      this.score += bonusScore;
+
       this.combo = Math.min(CONFIG.SCORE.MAX_COMBO, this.combo + 1);
       this.maxCombo = Math.max(this.maxCombo, this.combo);
 
-      this.speed = Math.min(CONFIG.MAX_SPEED, this.speed + CONFIG.SPEED_BOOST);
+      // Correct answer ALWAYS resets dog to 40m safe distance!
+      this.dog.onCorrectAnswer();
+
+      // Automatically activate ONE random power-up
+      this.activateRandomPowerup();
     } else {
       audioManager.playWrong();
       uiManager.triggerFlash(false);
 
       this.combo = 1;
-      this.speed = Math.max(CONFIG.INITIAL_SPEED, this.speed - 3.5);
+      this.speed = Math.max(CONFIG.INITIAL_SPEED, this.speed - 3.0);
+
+      // Wrong answer advances dog
+      const dogState = this.dog.onWrongAnswer();
+      if (dogState === 'CAUGHT') {
+        this.activeQuestion = null;
+        this.handleCaughtGameOver();
+        return;
+      } else {
+        audioManager.playDogGrowl();
+      }
     }
 
-    uiManager.hideQuestionModal();
     this.activeQuestion = null;
-
-    this.player.state = PlayerState.RUNNING;
     this.state = GameState.PLAYING;
+    if (this.player) {
+      if (this.player.isGrounded) {
+        this.player.state = PlayerState.RUNNING;
+        this.player.playAnimation('run', 0.1, true);
+      }
+    }
+  }
+
+  activateRandomPowerup() {
+    const picked = POWER_UPS[Math.floor(Math.random() * POWER_UPS.length)];
+
+    if (picked.id === 'NEURAL_SHIELD') {
+      this.hasShield = true;
+      this.player.setShield(true);
+      this.activePowerup = {
+        id: 'NEURAL_SHIELD',
+        name: 'NEURAL SHIELD',
+        icon: '🛡️',
+        duration: 1,
+        remaining: 1
+      };
+    } else if (picked.id === 'NEURAL_RUSH') {
+      this.speed = Math.min(CONFIG.MAX_SPEED + 6.0, this.speed + 7.0);
+      this.targetFov = 66.0;
+      this.activePowerup = {
+        id: 'NEURAL_RUSH',
+        name: 'NEURAL RUSH',
+        icon: '⚡',
+        duration: 6.0,
+        remaining: 6.0
+      };
+    } else if (picked.id === 'NEURO_MAGNET') {
+      this.activePowerup = {
+        id: 'NEURO_MAGNET',
+        name: 'NEURO MAGNET',
+        icon: '🧲',
+        duration: 8.0,
+        remaining: 8.0
+      };
+    } else if (picked.id === 'DOUBLE_SCORE') {
+      this.activePowerup = {
+        id: 'DOUBLE_SCORE',
+        name: 'DOUBLE SCORE',
+        icon: '✖️2',
+        duration: 8.0,
+        remaining: 8.0
+      };
+    }
+
+    audioManager.playPowerUp();
+    uiManager.updatePowerup(this.activePowerup);
   }
 
   update(delta) {
     // 1. Cinematic Background during MENU state
     if (this.state === GameState.MENU) {
-      // Slowly scroll railway tracks and animate Remy
-      this.world.update(5.5, delta, 0);
+      this.world.update(5.5, delta);
       if (this.player && this.player.mixer) {
         this.player.mixer.update(delta * 0.85);
       }
-      // Subtle cinematic camera motion
       const t = this.clock.getElapsedTime();
       this.camera.position.x = Math.sin(t * 0.5) * 0.35;
       this.camera.position.y = CONFIG.CAMERA.OFFSET_Y + Math.cos(t * 0.6) * 0.08;
@@ -299,64 +382,133 @@ export class Game {
       return;
     }
 
-    // 2. Question Pause State (Complete Freeze of world & distance)
+    // 2. Question Pause State: COMPLETE FREEZE of world, player, dog, distance, timers
     if (this.state === GameState.QUESTION) {
-      if (this.player) {
-        this.player.update(delta);
-        this.updateCamera(delta);
-      }
       return;
     }
 
-    // 3. Paused / Game Over state
+    // 3. Paused or Game Over state
     if (this.state !== GameState.PLAYING) {
-      if (this.player && this.player.mixer) {
-        this.player.mixer.update(delta);
-      }
       return;
     }
 
-    // 4. Update Player
+    // 4. Update Invulnerability Window
+    if (this.invulnerableTimer > 0) {
+      this.invulnerableTimer -= delta;
+    }
+
+    // 5. Update Power-up Timers & Camera FOV
+    if (this.activePowerup && this.activePowerup.id !== 'NEURAL_SHIELD') {
+      this.activePowerup.remaining -= delta;
+      if (this.activePowerup.remaining <= 0) {
+        if (this.activePowerup.id === 'NEURAL_RUSH') {
+          this.targetFov = CONFIG.CAMERA.FOV;
+          this.speed = Math.max(CONFIG.INITIAL_SPEED, this.speed - 5.0);
+        }
+        this.activePowerup = null;
+        uiManager.updatePowerup(null);
+      } else {
+        uiManager.updatePowerup(this.activePowerup);
+      }
+    }
+
+    // Dynamic FOV interpolation
+    this.camera.fov = THREE.MathUtils.damp(this.camera.fov, this.targetFov, 4.0, delta);
+    this.camera.updateProjectionMatrix();
+
+    // 6. Update Player
     this.player.update(delta);
 
-    // 5. Update World tracks & scenery with Zone progression based on distance
-    this.world.update(this.speed, delta, this.distance);
+    // 7. Update World (deterministic zone progression)
+    this.world.update(this.speed, delta);
 
-    // 6. Update Obstacles
-    this.obstacleManager.update(this.speed, delta, true);
+    // Smooth Dynamic Biome Atmosphere (Fog, Sky & Ambient Light)
+    const atmo = ZONE_ATMOSPHERE[this.world.currentZone] || ZONE_ATMOSPHERE[ZoneType.CITY_ROAD];
+    this.targetFogColor.setHex(atmo.fog);
+    this.targetSkyColor.setHex(atmo.sky);
+    this.targetHemiColor.setHex(atmo.hemiSky);
 
-    // 7. Update Knowledge Gate (trigger question pause every 175m)
+    this.scene.fog.color.lerp(this.targetFogColor, delta * 2.5);
+    this.scene.background.lerp(this.targetSkyColor, delta * 2.5);
+    if (this.hemiLight) {
+      this.hemiLight.color.lerp(this.targetHemiColor, delta * 2.5);
+    }
+
+    // 8. Update Obstacles with zone awareness (Trains in Railway, Barriers on Roads)
+    this.obstacleManager.update(this.speed, delta, true, this.world.currentZone);
+
+    // 9. Update Collectible Coins
+    let magnetCollected = 0;
+    if (this.activePowerup && this.activePowerup.id === 'NEURO_MAGNET') {
+      magnetCollected = this.coinManager.attractToPlayer(this.player.position, 14.0, delta);
+    }
+    this.coinManager.update(this.speed, delta, true, this.player.position);
+
+    const coinsCollected = this.coinManager.checkCollision(this.player.box, this.player.position) + magnetCollected;
+    if (coinsCollected > 0) {
+      this.coins += coinsCollected * 10;
+      audioManager.playCoinPickup();
+      const multiplier = (this.activePowerup?.id === 'DOUBLE_SCORE' ? 2 : 1) * this.combo;
+      this.score += coinsCollected * 50 * multiplier;
+    }
+
+    // 10. Update Knowledge Gate (trigger question pause every 175m)
     const gateEvent = this.gateManager.update(this.speed, delta);
     if (gateEvent && gateEvent.type === 'PAUSE_FOR_QUESTION') {
       this.triggerQuestionPause(gateEvent.question);
       return;
     }
 
-    // 8. Audio Footsteps when grounded
+    // 11. Update Dog Pursuit
+    if (this.dog) {
+      this.dog.update(this.player.position, this.speed, delta);
+      uiManager.updateDogThreat(this.dog.state, this.dog.currentDistance);
+
+      if (this.dog.state === 'CAUGHT' && this.dog.currentDistance <= 1.2) {
+        this.handleCaughtGameOver();
+        return;
+      }
+    }
+
+    // 12. Audio Footsteps when grounded
     if (this.player.isGrounded && this.player.state === PlayerState.RUNNING) {
       audioManager.playFootstep(delta, this.speed);
     }
 
-    // 9. Check Collisions
-    const collision = this.obstacleManager.checkCollision(this.player.box);
-    if (collision.hit) {
-      this.handleCollision();
-      return;
+    // 13. Check Collisions (shield protection check)
+    if (this.invulnerableTimer <= 0) {
+      const collision = this.obstacleManager.checkCollision(this.player.box);
+      if (collision.hit) {
+        if (this.hasShield) {
+          // Neural Shield absorbs one impact!
+          this.hasShield = false;
+          this.player.setShield(false);
+          this.activePowerup = null;
+          uiManager.updatePowerup(null);
+          this.invulnerableTimer = 1.4;
+          audioManager.playShieldBreak();
+          uiManager.triggerFlash(false);
+        } else {
+          this.handleCollision('CRASHED');
+          return;
+        }
+      }
     }
 
-    // 10. Progression & Scoring (only while running)
+    // 14. Progression & Scoring
+    const scoreRate = (this.activePowerup?.id === 'DOUBLE_SCORE' ? 2 : 1) * this.combo;
     this.distance += this.speed * delta;
-    this.score += CONFIG.SCORE.DISTANCE_RATE * this.combo * delta;
+    this.score += CONFIG.SCORE.DISTANCE_RATE * scoreRate * delta;
     this.speed = Math.min(CONFIG.MAX_SPEED, this.speed + CONFIG.ACCELERATION * delta);
 
-    // 11. Update Camera
+    // 15. Update Camera
     this.updateCamera(delta);
 
-    // 12. Update UI HUD
-    uiManager.updateHUD(this.score, this.distance, this.combo, this.speed);
+    // 16. Update UI HUD
+    uiManager.updateHUD(this.score, this.distance, this.coins, this.combo, this.speed);
   }
 
-  handleCollision() {
+  handleCollision(cause = 'CRASHED') {
     this.state = GameState.GAME_OVER;
     this.player.state = PlayerState.DEAD;
 
@@ -367,13 +519,35 @@ export class Game {
     const stats = {
       score: this.score,
       distance: this.distance,
+      coins: this.coins,
       correctAnswers: this.correctAnswers,
       totalQuestions: this.totalQuestions,
       maxCombo: this.maxCombo
     };
 
     setTimeout(() => {
-      uiManager.showGameOver(stats, () => this.restart());
+      uiManager.showGameOver(stats, () => this.restart(), cause);
+    }, 600);
+  }
+
+  handleCaughtGameOver() {
+    this.state = GameState.GAME_OVER;
+    this.player.state = PlayerState.DEAD;
+
+    audioManager.playDogCatch();
+    uiManager.triggerFlash(false);
+
+    const stats = {
+      score: this.score,
+      distance: this.distance,
+      coins: this.coins,
+      correctAnswers: this.correctAnswers,
+      totalQuestions: this.totalQuestions,
+      maxCombo: this.maxCombo
+    };
+
+    setTimeout(() => {
+      uiManager.showGameOver(stats, () => this.restart(), 'CAUGHT');
     }, 600);
   }
 
