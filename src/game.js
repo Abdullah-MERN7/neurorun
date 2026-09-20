@@ -54,6 +54,24 @@ export class Game {
     this.lastWidth = 0;
     this.lastHeight = 0;
 
+    // Empirical Telemetry Timestamps & Lifecycle Tracking
+    this.timestamps = {
+      initStart: performance.now(),
+      rendererCreated: 0,
+      sceneCreated: 0,
+      assetsFinished: 0,
+      worldBuilt: 0,
+      playerBuilt: 0,
+      firstRender: 0,
+      frame10: 0,
+      frame60: 0,
+      frame300: 0
+    };
+    this.contextLostTime = 0;
+    this.frameCount = 0;
+    this.perfHistory = [];
+    this.diagIsolationMode = 0; // 0 = Full Scene, 1 = Surface Only, 2 = Surface + Biome, 3 = Surface + Bldgs
+
     // Listen for uncaught JS errors for telemetry
     window.addEventListener('error', (e) => {
       if (e && e.message) {
@@ -94,7 +112,194 @@ export class Game {
     this.hemiLight = null;
   }
 
+  // -------------------------------------------------------------
+  // EMPIRICAL SCENE GRAPH & RENDERER DIAGNOSTIC ENGINE
+  // -------------------------------------------------------------
+  analyzeSceneGraph() {
+    if (!this.scene) {
+      return {
+        totalMeshes: 0,
+        skinnedMeshes: 0,
+        lines: 0,
+        sprites: 0,
+        points: 0,
+        castShadowsCount: 0,
+        receiveShadowsCount: 0,
+        totalLights: 0,
+        lightBreakdown: '',
+        uniqueGeometries: 0,
+        uniqueMaterials: 0,
+        uniqueTextures: 0,
+        breakdownText: 'No active scene',
+        textureAuditText: 'No textures loaded'
+      };
+    }
+
+    let totalMeshes = 0;
+    let skinnedMeshes = 0;
+    let lines = 0;
+    let sprites = 0;
+    let points = 0;
+    let castShadowsCount = 0;
+    let receiveShadowsCount = 0;
+
+    let dirLights = 0;
+    let pointLights = 0;
+    let spotLights = 0;
+    let hemiLights = 0;
+    let ambLights = 0;
+
+    const uniqueGeometries = new Set();
+    const uniqueMaterials = new Set();
+    const uniqueTextures = new Set();
+    const textureList = [];
+
+    const processMaterial = (mat) => {
+      if (!mat) return;
+      if (Array.isArray(mat)) {
+        mat.forEach(processMaterial);
+        return;
+      }
+      uniqueMaterials.add(mat.uuid || mat.id);
+
+      const texProps = ['map', 'roughnessMap', 'metalnessMap', 'normalMap', 'bumpMap', 'alphaMap', 'envMap'];
+      texProps.forEach((prop) => {
+        if (mat[prop] && mat[prop].isTexture) {
+          const tex = mat[prop];
+          if (!uniqueTextures.has(tex.uuid || tex.id)) {
+            uniqueTextures.add(tex.uuid || tex.id);
+            const w = tex.image ? (tex.image.width || 0) : 0;
+            const h = tex.image ? (tex.image.height || 0) : 0;
+            textureList.push({
+              name: tex.name || prop,
+              width: w,
+              height: h,
+              format: tex.format || 'RGBA'
+            });
+          }
+        }
+      });
+    };
+
+    const categoryCounts = {
+      player: 0,
+      dog: 0,
+      worldSegments: {},
+      other: 0
+    };
+
+    this.scene.traverse((obj) => {
+      if (obj.isMesh) {
+        totalMeshes++;
+        if (obj.isSkinnedMesh) skinnedMeshes++;
+        if (obj.castShadow) castShadowsCount++;
+        if (obj.receiveShadow) receiveShadowsCount++;
+
+        if (obj.geometry) uniqueGeometries.add(obj.geometry.uuid || obj.geometry.id);
+        if (obj.material) processMaterial(obj.material);
+
+        let parent = obj.parent;
+        let categorized = false;
+        while (parent) {
+          if (parent === this.player?.mesh || parent === this.player?.shieldMesh) {
+            categoryCounts.player++;
+            categorized = true;
+            break;
+          }
+          if (parent === this.dog?.mesh) {
+            categoryCounts.dog++;
+            categorized = true;
+            break;
+          }
+          if (parent.constructor && parent.constructor.name === 'WorldSegment') {
+            const segIdx = parent.index !== undefined ? parent.index : 'Unknown';
+            categoryCounts.worldSegments[segIdx] = (categoryCounts.worldSegments[segIdx] || 0) + 1;
+            categorized = true;
+            break;
+          }
+          parent = parent.parent;
+        }
+        if (!categorized) {
+          categoryCounts.other++;
+        }
+      } else if (obj.isLine) {
+        lines++;
+      } else if (obj.isSprite) {
+        sprites++;
+      } else if (obj.isPoints) {
+        points++;
+      } else if (obj.isLight) {
+        if (obj.isDirectionalLight) dirLights++;
+        else if (obj.isPointLight) pointLights++;
+        else if (obj.isSpotLight) spotLights++;
+        else if (obj.isHemisphereLight) hemiLights++;
+        else if (obj.isAmbientLight) ambLights++;
+      }
+    });
+
+    let breakdownText = `Scene Total Meshes: ${totalMeshes} (Skinned: ${skinnedMeshes})\n`;
+    breakdownText += `Player: ${categoryCounts.player} | Dog: ${categoryCounts.dog} | Dynamic/Other: ${categoryCounts.other}\n`;
+    breakdownText += `World Segment Mesh Distribution:\n`;
+
+    if (this.world && this.world.segments) {
+      this.world.segments.forEach((seg) => {
+        let segMeshes = 0;
+        seg.group.traverse((c) => { if (c.isMesh) segMeshes++; });
+        breakdownText += `  Seg ${seg.index} [${seg.currentZone}]: ${segMeshes} meshes (z=${seg.getPositionZ().toFixed(0)}m)\n`;
+      });
+    }
+
+    let textureAuditText = `Total Unique Textures Active: ${uniqueTextures.size}\n`;
+    if (textureList.length === 0) {
+      textureAuditText += `No embedded material textures active in current scene graph.\n`;
+    } else {
+      textureList.forEach((t, i) => {
+        const isLarge = t.width >= 2048 || t.height >= 2048;
+        textureAuditText += `  [${i + 1}] ${t.name}: ${t.width}x${t.height} ${isLarge ? '⚠️ LARGE TEXTURE' : 'OK'}\n`;
+      });
+    }
+
+    return {
+      totalMeshes,
+      skinnedMeshes,
+      lines,
+      sprites,
+      points,
+      castShadowsCount,
+      receiveShadowsCount,
+      totalLights: dirLights + pointLights + spotLights + hemiLights + ambLights,
+      lightBreakdown: `Dir:${dirLights} Hemi:${hemiLights} Pt:${pointLights}`,
+      uniqueGeometries: uniqueGeometries.size,
+      uniqueMaterials: uniqueMaterials.size,
+      uniqueTextures: uniqueTextures.size,
+      breakdownText,
+      textureAuditText
+    };
+  }
+
+  recordPerfHistory(label) {
+    if (!this.renderer) return;
+    const calls = this.renderer.info.render.calls;
+    const tris = this.renderer.info.render.triangles;
+    const geos = this.renderer.info.memory.geometries;
+    const texs = this.renderer.info.memory.textures;
+    const sceneAnalysis = this.analyzeSceneGraph();
+    const line = `[${label}] calls:${calls} tris:${tris} geos:${geos} texs:${texs} meshes:${sceneAnalysis.totalMeshes}`;
+    this.perfHistory.push(line);
+    console.log(`[PERF HIST] ${line}`);
+  }
+
   getDiagnosticInfo() {
+    const sceneAnalysis = this.analyzeSceneGraph();
+    const gl = this.renderer ? this.renderer.getContext() : null;
+    const glErr = gl ? gl.getError() : 'None';
+    const canvasCount = document.querySelectorAll('canvas').length;
+
+    const lifetimeMs = this.contextLostTime
+      ? Math.round(this.contextLostTime - this.timestamps.initStart)
+      : Math.round(performance.now() - this.timestamps.initStart);
+    const lifetimeSec = (lifetimeMs / 1000).toFixed(2);
+
     return {
       webgl2: WebGL.isWebGL2Available(),
       rendererCreated: !!this.renderer,
@@ -111,7 +316,24 @@ export class Game {
       triangles: this.renderer ? this.renderer.info.render.triangles : 0,
       geometries: this.renderer ? this.renderer.info.memory.geometries : 0,
       textures: this.renderer ? this.renderer.info.memory.textures : 0,
-      contextState: this.contextState
+      contextState: this.contextState,
+      contextLifetimeMs: lifetimeMs,
+      contextLifetimeSec: parseFloat(lifetimeSec),
+      glError: glErr,
+      canvasCount: canvasCount,
+      shadowsEnabled: this.renderer ? this.renderer.shadowMap.enabled : false,
+      totalMeshes: sceneAnalysis.totalMeshes,
+      skinnedMeshes: sceneAnalysis.skinnedMeshes,
+      castShadowsCount: sceneAnalysis.castShadowsCount,
+      receiveShadowsCount: sceneAnalysis.receiveShadowsCount,
+      totalLights: sceneAnalysis.totalLights,
+      lightBreakdown: sceneAnalysis.lightBreakdown,
+      uniqueGeometries: sceneAnalysis.uniqueGeometries,
+      uniqueMaterials: sceneAnalysis.uniqueMaterials,
+      uniqueTextures: sceneAnalysis.uniqueTextures,
+      sceneBreakdown: sceneAnalysis.breakdownText,
+      textureAudit: sceneAnalysis.textureAuditText,
+      perfTrend: this.perfHistory ? this.perfHistory.join('\n') : 'Recording history...'
     };
   }
 
@@ -135,6 +357,7 @@ export class Game {
         uiManager.updateDiagnostics(this.getDiagnosticInfo());
       });
       assetsLoadedSuccessfully = true;
+      this.timestamps.assetsFinished = performance.now();
     } catch (err) {
       console.error('[Game] Required asset loading failure:', err);
       this.jsErrors.push(err.message || String(err));
@@ -149,6 +372,7 @@ export class Game {
 
     this.player = new Player(this.scene);
     this.player.init();
+    this.timestamps.playerBuilt = performance.now();
 
     this.player.onJump = () => audioManager.playJump();
     this.player.onLand = () => audioManager.playLand();
@@ -156,6 +380,7 @@ export class Game {
 
     this.world = new World(this.scene);
     this.world.init();
+    this.timestamps.worldBuilt = performance.now();
 
     this.obstacleManager = new ObstacleManager(this.scene);
     this.coinManager = new CoinManager(this.scene);
@@ -178,6 +403,7 @@ export class Game {
 
   initScene() {
     this.scene = new THREE.Scene();
+    this.timestamps.sceneCreated = performance.now();
 
     // Stylized twilight sky with mathematically calculated fog for 9 segments
     this.scene.background = new THREE.Color(0x131a2e);
@@ -201,6 +427,7 @@ export class Game {
       stencil: false,
       depth: true
     });
+    this.timestamps.rendererCreated = performance.now();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(this.pixelRatio);
 
@@ -216,16 +443,20 @@ export class Game {
     this.renderer.toneMappingExposure = 1.2;
     document.body.appendChild(this.renderer.domElement);
 
-    // REQUIREMENT 5: Context Loss Event Handlers
+    // REQUIREMENT 5 & 17: Empirical Context Loss Event Handlers with Alert Modal
     const canvas = this.renderer.domElement;
     canvas.addEventListener('webglcontextlost', (event) => {
       event.preventDefault();
+      this.contextLostTime = performance.now();
       console.warn('[Game] WebGL context lost!');
       this.contextState = 'LOST';
       if (this.state === GameState.PLAYING) {
         this.state = GameState.PAUSED;
       }
-      uiManager.showDiagnostics(this.getDiagnosticInfo());
+      const info = this.getDiagnosticInfo();
+      info.suspectedCause = `GPU Driver WebGL Context Loss! Draw calls before loss: ${info.drawCalls}, Triangles: ${info.triangles}, Meshes: ${info.totalMeshes}, Geometries: ${info.geometries}, Textures: ${info.textures}. Context lifetime: ${info.contextLifetimeSec}s.`;
+      uiManager.showContextLossAlert(info);
+      uiManager.showDiagnostics(info);
     });
 
     canvas.addEventListener('webglcontextrestored', () => {
@@ -673,7 +904,31 @@ export class Game {
     const delta = Math.min(this.clock.getDelta(), 0.05);
 
     if (this.contextState !== 'LOST') {
+      this.frameCount++;
+
+      if (this.frameCount === 1) {
+        this.timestamps.firstRender = performance.now();
+        this.recordPerfHistory('Frame 1 (First Render)');
+      } else if (this.frameCount === 10) {
+        this.timestamps.frame10 = performance.now();
+        this.recordPerfHistory('Frame 10');
+      } else if (this.frameCount === 30) {
+        this.recordPerfHistory('Frame 30');
+      } else if (this.frameCount === 60) {
+        this.timestamps.frame60 = performance.now();
+        this.recordPerfHistory('Frame 60');
+      } else if (this.frameCount === 120) {
+        this.recordPerfHistory('Frame 120');
+      } else if (this.frameCount === 300) {
+        this.timestamps.frame300 = performance.now();
+        this.recordPerfHistory('Frame 300');
+      } else if (this.frameCount % 600 === 0) { // Every 10 seconds at 60 FPS
+        const sec = Math.round(this.frameCount / 60);
+        this.recordPerfHistory(`${sec}s`);
+      }
+
       this.update(delta);
+
       if (this.renderer && this.scene && this.camera) {
         this.renderer.render(this.scene, this.camera);
       }

@@ -15,6 +15,17 @@ export class UIManager {
       webglErrorScreen: document.getElementById('webgl-error-screen'),
       webglErrorMsg: document.getElementById('webgl-error-msg'),
 
+      contextLossAlert: document.getElementById('context-loss-alert'),
+      clLifetime: document.getElementById('cl-lifetime'),
+      clGLError: document.getElementById('cl-gl-error'),
+      clDrawCalls: document.getElementById('cl-draw-calls'),
+      clTriangles: document.getElementById('cl-triangles'),
+      clGeometries: document.getElementById('cl-geometries'),
+      clTextures: document.getElementById('cl-textures'),
+      clCanvasCount: document.getElementById('cl-canvas-count'),
+      clCause: document.getElementById('cl-cause'),
+      btnRestartContext: document.getElementById('btn-restart-context'),
+
       diagnosticOverlay: document.getElementById('diagnostic-overlay'),
       btnCloseDiag: document.getElementById('btn-close-diag'),
       diagWebGL2: document.getElementById('diag-webgl2'),
@@ -25,10 +36,25 @@ export class UIManager {
       diagEffectiveDPR: document.getElementById('diag-effective-dpr'),
       diagAssets: document.getElementById('diag-assets'),
       diagContext: document.getElementById('diag-context'),
+      diagContextLifetime: document.getElementById('diag-context-lifetime'),
+      diagGLError: document.getElementById('diag-gl-error'),
+      diagCanvasCount: document.getElementById('diag-canvas-count'),
+      diagShadowsEnabled: document.getElementById('diag-shadows-enabled'),
+
       diagDrawCalls: document.getElementById('diag-draw-calls'),
       diagTriangles: document.getElementById('diag-triangles'),
       diagGeometries: document.getElementById('diag-geometries'),
       diagTextures: document.getElementById('diag-textures'),
+      diagUniqueGeos: document.getElementById('diag-unique-geos'),
+      diagUniqueMats: document.getElementById('diag-unique-mats'),
+      diagUniqueTexs: document.getElementById('diag-unique-texs'),
+      diagMeshCounts: document.getElementById('diag-mesh-counts'),
+      diagShadowCounts: document.getElementById('diag-shadow-counts'),
+      diagLightCounts: document.getElementById('diag-light-counts'),
+
+      diagSceneBreakdown: document.getElementById('diag-scene-breakdown'),
+      diagTextureAudit: document.getElementById('diag-texture-audit'),
+      diagPerfTrend: document.getElementById('diag-perf-trend'),
       diagFailedAssets: document.getElementById('diag-failed-assets'),
       diagJSErrors: document.getElementById('diag-js-errors'),
 
@@ -99,6 +125,9 @@ export class UIManager {
     if (this.elements.btnCloseDiag) {
       this.elements.btnCloseDiag.onclick = () => this.hideDiagnostics();
     }
+    if (this.elements.btnRestartContext) {
+      this.elements.btnRestartContext.onclick = () => window.location.reload();
+    }
   }
 
   showWebGLError(msg) {
@@ -106,6 +135,25 @@ export class UIManager {
     if (this.elements.webglErrorScreen) {
       if (msg && this.elements.webglErrorMsg) this.elements.webglErrorMsg.textContent = msg;
       this.elements.webglErrorScreen.style.display = 'flex';
+    }
+  }
+
+  showContextLossAlert(info) {
+    if (!this.elements.contextLossAlert) return;
+    this.elements.contextLossAlert.style.display = 'flex';
+    if (this.elements.clLifetime) this.elements.clLifetime.textContent = `${info.contextLifetimeSec ? info.contextLifetimeSec.toFixed(2) : '0.00'}s (${info.contextLifetimeMs || 0}ms)`;
+    if (this.elements.clGLError) this.elements.clGLError.textContent = info.glError !== undefined ? info.glError : 'N/A';
+    if (this.elements.clDrawCalls) this.elements.clDrawCalls.textContent = info.drawCalls || 0;
+    if (this.elements.clTriangles) this.elements.clTriangles.textContent = info.triangles || 0;
+    if (this.elements.clGeometries) this.elements.clGeometries.textContent = info.geometries || 0;
+    if (this.elements.clTextures) this.elements.clTextures.textContent = info.textures || 0;
+    if (this.elements.clCanvasCount) this.elements.clCanvasCount.textContent = info.canvasCount || 1;
+    if (this.elements.clCause) this.elements.clCause.textContent = info.suspectedCause || 'GPU driver context loss / VRAM limit exceeded.';
+  }
+
+  hideContextLossAlert() {
+    if (this.elements.contextLossAlert) {
+      this.elements.contextLossAlert.style.display = 'none';
     }
   }
 
@@ -132,11 +180,31 @@ export class UIManager {
     if (this.elements.diagEffectiveDPR) this.elements.diagEffectiveDPR.textContent = info.effectiveDPR ? info.effectiveDPR.toFixed(2) : '--';
     if (this.elements.diagAssets) this.elements.diagAssets.textContent = `${info.assetsLoaded || 0} / ${info.totalAssets || 0}`;
     if (this.elements.diagContext) this.elements.diagContext.textContent = info.contextState || 'ACTIVE';
+    if (this.elements.diagContextLifetime) this.elements.diagContextLifetime.textContent = `${info.contextLifetimeSec ? info.contextLifetimeSec.toFixed(2) : '0.00'}s`;
+    if (this.elements.diagGLError) this.elements.diagGLError.textContent = info.glError !== undefined ? info.glError : 'None';
+    if (this.elements.diagCanvasCount) this.elements.diagCanvasCount.textContent = info.canvasCount !== undefined ? info.canvasCount : 1;
+    if (this.elements.diagShadowsEnabled) this.elements.diagShadowsEnabled.textContent = info.shadowsEnabled ? 'YES' : 'NO';
+
     if (this.elements.diagDrawCalls) this.elements.diagDrawCalls.textContent = info.drawCalls !== undefined ? info.drawCalls : '--';
     if (this.elements.diagTriangles) this.elements.diagTriangles.textContent = info.triangles !== undefined ? info.triangles : '--';
     if (this.elements.diagGeometries) this.elements.diagGeometries.textContent = info.geometries !== undefined ? info.geometries : '--';
     if (this.elements.diagTextures) this.elements.diagTextures.textContent = info.textures !== undefined ? info.textures : '--';
+    if (this.elements.diagUniqueGeos) this.elements.diagUniqueGeos.textContent = info.uniqueGeometries !== undefined ? info.uniqueGeometries : '--';
+    if (this.elements.diagUniqueMats) this.elements.diagUniqueMats.textContent = info.uniqueMaterials !== undefined ? info.uniqueMaterials : '--';
+    if (this.elements.diagUniqueTexs) this.elements.diagUniqueTexs.textContent = info.uniqueTextures !== undefined ? info.uniqueTextures : '--';
+    if (this.elements.diagMeshCounts) this.elements.diagMeshCounts.textContent = `${info.totalMeshes || 0} (Skinned: ${info.skinnedMeshes || 0})`;
+    if (this.elements.diagShadowCounts) this.elements.diagShadowCounts.textContent = `Cast: ${info.castShadowsCount || 0} / Recv: ${info.receiveShadowsCount || 0}`;
+    if (this.elements.diagLightCounts) this.elements.diagLightCounts.textContent = `${info.totalLights || 0} (${info.lightBreakdown || ''})`;
 
+    if (this.elements.diagSceneBreakdown) {
+      this.elements.diagSceneBreakdown.textContent = info.sceneBreakdown || 'Tree breakdown pending...';
+    }
+    if (this.elements.diagTextureAudit) {
+      this.elements.diagTextureAudit.textContent = info.textureAudit || 'Texture audit pending...';
+    }
+    if (this.elements.diagPerfTrend) {
+      this.elements.diagPerfTrend.textContent = info.perfTrend || 'Recording history...';
+    }
     if (this.elements.diagFailedAssets) {
       this.elements.diagFailedAssets.textContent = (info.failedAssets && info.failedAssets.length > 0)
         ? info.failedAssets.join('\n')
