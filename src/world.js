@@ -170,128 +170,114 @@ const signalLensGeo = new THREE.SphereGeometry(0.2, 8, 8);
 // Transition ramp plate
 const transitionPlateGeo = new THREE.BoxGeometry(14.0, 0.08, 1.2);
 const transitionPlateMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.6, metalness: 0.4 });
+const IS_MOBILE_DEVICE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 class WorldSegment {
   constructor(scene, segmentIndex) {
     this.scene = scene;
     this.index = segmentIndex;
-    this.currentZone = ZoneType.CITY_ROAD;
+    this.currentZone = null;
     this.group = new THREE.Group();
 
-    // Architectural containers matching WorldSegment hierarchy:
-    // WorldSegment -> surfaceGroup (ONLY ONE: ROAD or RAILWAY), sceneryGroup (biome scenery)
+    // Containers matching WorldSegment hierarchy:
+    // WorldSegment -> surfaceGroup, sceneryGroup
     this.surfaceGroup = new THREE.Group();
     this.sceneryGroup = new THREE.Group();
     this.group.add(this.surfaceGroup);
     this.group.add(this.sceneryGroup);
 
-    // Pre-build cached standalone surface groups
-    this.roadSurfaceGroup = new THREE.Group();
-    this.railSurfaceGroup = new THREE.Group();
-    this.transInSurfaceGroup = new THREE.Group();
-    this.transOutSurfaceGroup = new THREE.Group();
-
-    // Pre-build cached standalone scenery groups
-    this.cityGroup = new THREE.Group();
-    this.railSceneryGroup = new THREE.Group();
-    this.industrialGroup = new THREE.Group();
-    this.desertGroup = new THREE.Group();
-    this.coastGroup = new THREE.Group();
-    this.greenGroup = new THREE.Group();
-
-    // Build the geometries into the standalone cached groups
-    this.buildRoadSurface();
-    this.buildRailSurface();
-    this.buildTransitionInSurface();
-    this.buildTransitionOutSurface();
-    this.prebuildAllScenery();
-
-    // Apply initial zone (attaches ONLY the matching surface and scenery)
+    // Apply initial zone (builds surface and scenery ONLY for target zone)
     this.setZone(ZoneType.CITY_ROAD);
 
     this.scene.add(this.group);
   }
 
+  clearGroup(targetGroup) {
+    while (targetGroup.children.length > 0) {
+      targetGroup.remove(targetGroup.children[0]);
+    }
+  }
+
   // -------------------------------------------------------------
-  // ROAD SURFACE (Solid 13m Asphalt deck, lane dashes, curbs - ZERO TRACKS)
+  // ROAD SURFACE (Solid 13m Asphalt deck, lane dashes, curbs)
   // -------------------------------------------------------------
-  buildRoadSurface() {
-    // 1. Solid 13m Wide Asphalt Deck (Centered at Z = 0, top surface at Y = 0.0)
+  buildRoadSurface(targetGroup) {
+    // 1. Solid 13m Wide Asphalt Deck
     const asphalt = new THREE.Mesh(roadDeckGeo, roadDeckMat);
     asphalt.position.set(0, -0.125, 0);
-    asphalt.receiveShadow = true;
-    this.roadSurfaceGroup.add(asphalt);
+    asphalt.receiveShadow = !IS_MOBILE_DEVICE;
+    targetGroup.add(asphalt);
 
-    // 2. Concrete Road Curbs at X = ±6.3m (Centered at Z = 0)
+    // 2. Concrete Road Curbs at X = ±6.3m
     const curbL = new THREE.Mesh(curbGeo, roadCurbMat);
     curbL.position.set(-6.3, 0.075, 0);
-    curbL.receiveShadow = true;
-    this.roadSurfaceGroup.add(curbL);
+    curbL.receiveShadow = !IS_MOBILE_DEVICE;
+    targetGroup.add(curbL);
 
     const curbR = new THREE.Mesh(curbGeo, roadCurbMat);
     curbR.position.set(6.3, 0.075, 0);
-    curbR.receiveShadow = true;
-    this.roadSurfaceGroup.add(curbR);
+    curbR.receiveShadow = !IS_MOBILE_DEVICE;
+    targetGroup.add(curbR);
 
-    // 3. Road Lane Markings (Chevrons between lanes at X = -1.3 and X = +1.3, centered around Z = 0)
+    // 3. Road Lane Markings (Chevrons between lanes)
+    // Step size calibrated for mobile stability (6.0m step) vs desktop (2.5m step)
+    const stepZ = IS_MOBILE_DEVICE ? 6.0 : 2.5;
     const boundaryDividers = [-1.3, 1.3];
+
     boundaryDividers.forEach((divX) => {
-      for (let z = 19.0; z > -19.0; z -= 2.5) {
+      for (let z = 18.0; z >= -18.0; z -= stepZ) {
         const dash = new THREE.Mesh(guideLineGeo, guideLineMat);
         dash.rotation.x = -Math.PI / 2;
         dash.position.set(divX, 0.015, z);
-        this.roadSurfaceGroup.add(dash);
+        targetGroup.add(dash);
 
         const wingL = new THREE.Mesh(chevronWingGeo, chevronMat);
         wingL.rotation.x = -Math.PI / 2;
         wingL.rotation.z = -0.65;
         wingL.position.set(divX - 0.16, 0.016, z - 0.12);
-        this.roadSurfaceGroup.add(wingL);
+        targetGroup.add(wingL);
 
         const wingR = new THREE.Mesh(chevronWingGeo, chevronMat);
         wingR.rotation.x = -Math.PI / 2;
         wingR.rotation.z = 0.65;
         wingR.position.set(divX + 0.16, 0.016, z - 0.12);
-        this.roadSurfaceGroup.add(wingR);
+        targetGroup.add(wingR);
       }
     });
 
     // 4. Yellow Road Hazard Edge Stripes at X = ±6.0
+    const edgeStepZ = IS_MOBILE_DEVICE ? 8.0 : 3.8;
     [-6.0, 6.0].forEach((edgeX) => {
-      for (let z = 18.0; z > -18.0; z -= 3.8) {
+      for (let z = 16.0; z >= -16.0; z -= edgeStepZ) {
         const stripe = new THREE.Mesh(borderGeo, borderMat);
         stripe.rotation.x = -Math.PI / 2;
         stripe.position.set(edgeX, 0.016, z);
-        this.roadSurfaceGroup.add(stripe);
+        targetGroup.add(stripe);
       }
     });
   }
 
   // -------------------------------------------------------------
   // RAILWAY SURFACE (100% Ballast, 3 Tracks, Catenary, Signals)
-  // ABSOLUTELY ZERO ASPHALT, ZERO ROAD CURBS, ZERO ROAD MARKINGS
   // -------------------------------------------------------------
-  buildRailSurface() {
-    // 1. Wide Crushed-Stone Ballast Bed (14m wide, centered at Z = 0)
+  buildRailSurface(targetGroup) {
     const ballast = new THREE.Mesh(ballastBedGeo, ballastBedMat);
     ballast.position.set(0, -0.125, 0);
-    ballast.receiveShadow = true;
-    this.railSurfaceGroup.add(ballast);
+    ballast.receiveShadow = !IS_MOBILE_DEVICE;
+    targetGroup.add(ballast);
 
-    // 2. Wide Side Railway Gravel Ground starting at X = ±7.0m (Centered at Z = 0)
     const sideL = new THREE.Mesh(sideGroundGeo, railGravelMat);
     sideL.rotation.x = -Math.PI / 2;
     sideL.position.set(-87.0, -0.125, 0);
-    sideL.receiveShadow = true;
-    this.railSurfaceGroup.add(sideL);
+    sideL.receiveShadow = !IS_MOBILE_DEVICE;
+    targetGroup.add(sideL);
 
     const sideR = new THREE.Mesh(sideGroundGeo, railGravelMat);
     sideR.rotation.x = -Math.PI / 2;
     sideR.position.set(87.0, -0.125, 0);
-    sideR.receiveShadow = true;
-    this.railSurfaceGroup.add(sideR);
+    sideR.receiveShadow = !IS_MOBILE_DEVICE;
+    targetGroup.add(sideR);
 
-    // 3. Three Continuous Parallel Railway Tracks (Left, Center, Right, spanning Z = +18 to Z = -18)
     const pieceLength = 4.0;
     const piecesPerSegment = Math.round(segLength / pieceLength);
 
@@ -300,307 +286,290 @@ class WorldSegment {
         const trackPiece = assetLoader.getModelClone('track_rail');
         trackPiece.scale.set(1.5, 1.2, 1.0);
         trackPiece.position.set(laneX, 0.02, 18.0 - i * pieceLength);
-        this.railSurfaceGroup.add(trackPiece);
+        targetGroup.add(trackPiece);
       }
     });
 
-    // 4. Overhead Railway Catenary Infrastructure at Z = 0m
     const catenary = assetLoader.getModelClone('overhead_gantry');
     catenary.position.set(0, 0, 0);
     catenary.scale.set(14.0, 14.0, 14.0);
-    this.railSurfaceGroup.add(catenary);
+    targetGroup.add(catenary);
 
-    // 5. Railway Signals placed safely outside playable lanes at X = 6.2m
     const sigR = assetLoader.getModelClone('prop_signal');
     sigR.position.set(6.2, 0, -4);
     sigR.scale.set(6.0, 6.0, 6.0);
     sigR.rotation.y = Math.PI;
-    this.railSurfaceGroup.add(sigR);
+    targetGroup.add(sigR);
 
-    // Active Green Signal Aspect
     const aspectMesh = new THREE.Mesh(signalLensGeo, signalAspectGreenMat);
     aspectMesh.position.set(6.2, 3.2, -3.8);
-    this.railSurfaceGroup.add(aspectMesh);
+    targetGroup.add(aspectMesh);
 
-    // 6. Raised Railway Passenger/Freight Platform on Left side (X = -8.5m)
     const platform = new THREE.Mesh(platformGeo, platformMat);
     platform.position.set(-8.5, 0.28, 0);
-    platform.receiveShadow = true;
-    this.railSurfaceGroup.add(platform);
+    platform.receiveShadow = !IS_MOBILE_DEVICE;
+    targetGroup.add(platform);
 
     const platformEdge = new THREE.Mesh(platformEdgeGeo, platformEdgeMat);
     platformEdge.position.set(-6.68, 0.61, 0);
-    this.railSurfaceGroup.add(platformEdge);
+    targetGroup.add(platformEdge);
   }
 
-  // -------------------------------------------------------------
-  // TRANSITION TO RAIL (Road first half Z: +20 to 0 -> expansion plate at 0 -> ballast second half Z: 0 to -20)
-  // -------------------------------------------------------------
-  buildTransitionInSurface() {
-    // Road deck covers first half (Z: +20 to 0)
+  buildTransitionInSurface(targetGroup) {
     const roadHalf = new THREE.Mesh(halfRoadGeo, roadDeckMat);
     roadHalf.position.set(0, -0.125, segLength / 4);
-    roadHalf.receiveShadow = true;
-    this.transInSurfaceGroup.add(roadHalf);
+    roadHalf.receiveShadow = !IS_MOBILE_DEVICE;
+    targetGroup.add(roadHalf);
 
-    // Road Curbs ONLY on the road first half (Z: +20 to 0)
     const curbL1 = new THREE.Mesh(halfCurbGeo, roadCurbMat);
     curbL1.position.set(-6.3, 0.075, segLength / 4);
-    this.transInSurfaceGroup.add(curbL1);
+    targetGroup.add(curbL1);
 
     const curbR1 = new THREE.Mesh(halfCurbGeo, roadCurbMat);
     curbR1.position.set(6.3, 0.075, segLength / 4);
-    this.transInSurfaceGroup.add(curbR1);
+    targetGroup.add(curbR1);
 
-    // Ballast bed covers second half (Z: 0 to -20) - 14m wide pure ballast
     const ballastHalf = new THREE.Mesh(halfBallastGeo, ballastBedMat);
     ballastHalf.position.set(0, -0.125, -segLength / 4);
-    ballastHalf.receiveShadow = true;
-    this.transInSurfaceGroup.add(ballastHalf);
+    ballastHalf.receiveShadow = !IS_MOBILE_DEVICE;
+    targetGroup.add(ballastHalf);
 
-    // Side ground on transition starting at X = ±86.5m
     const sideL = new THREE.Mesh(sideGroundGeo, railGravelMat);
     sideL.rotation.x = -Math.PI / 2;
     sideL.position.set(-86.5, -0.125, 0);
-    this.transInSurfaceGroup.add(sideL);
+    targetGroup.add(sideL);
 
     const sideR = new THREE.Mesh(sideGroundGeo, railGravelMat);
     sideR.rotation.x = -Math.PI / 2;
     sideR.position.set(86.5, -0.125, 0);
-    this.transInSurfaceGroup.add(sideR);
+    targetGroup.add(sideR);
 
-    // Yellow expansion joint transition plate at Z = 0
     const plate = new THREE.Mesh(transitionPlateGeo, transitionPlateMat);
     plate.position.set(0, 0.01, 0);
-    this.transInSurfaceGroup.add(plate);
+    targetGroup.add(plate);
 
-    // 3 Railway Tracks start at Z = 0 and continue cleanly to Z = -20
     const pieceLength = 4.0;
     CONFIG.LANES.forEach((laneX) => {
       for (let i = 0; i < 5; i++) {
         const trackPiece = assetLoader.getModelClone('track_rail');
         trackPiece.scale.set(1.5, 1.2, 1.0);
         trackPiece.position.set(laneX, 0.02, -2.0 - i * pieceLength);
-        this.transInSurfaceGroup.add(trackPiece);
+        targetGroup.add(trackPiece);
       }
     });
 
-    // Overhead Railway Corridor Entrance Gantry at Z = 2m
     const entranceGantry = assetLoader.getModelClone('overhead_gantry');
     entranceGantry.position.set(0, 0, 2.0);
     entranceGantry.scale.set(14.0, 14.0, 14.0);
-    this.transInSurfaceGroup.add(entranceGantry);
+    targetGroup.add(entranceGantry);
 
-    // Advance Amber Warning Signal at entrance
     const sigWarn = assetLoader.getModelClone('prop_signal');
     sigWarn.position.set(6.2, 0, 2.0);
     sigWarn.scale.set(6.0, 6.0, 6.0);
     sigWarn.rotation.y = Math.PI;
-    this.transInSurfaceGroup.add(sigWarn);
+    targetGroup.add(sigWarn);
 
     const amberAspect = new THREE.Mesh(signalLensGeo, signalAspectAmberMat);
     amberAspect.position.set(6.2, 3.2, 2.2);
-    this.transInSurfaceGroup.add(amberAspect);
+    targetGroup.add(amberAspect);
   }
 
-  // -------------------------------------------------------------
-  // TRANSITION FROM RAIL (Ballast first half Z: +20 to 0 -> expansion plate at 0 -> road second half Z: 0 to -20)
-  // -------------------------------------------------------------
-  buildTransitionOutSurface() {
-    // Ballast bed on first half (Z: +20 to 0) - 14m wide pure ballast
+  buildTransitionOutSurface(targetGroup) {
     const ballastHalf = new THREE.Mesh(halfBallastGeo, ballastBedMat);
     ballastHalf.position.set(0, -0.125, segLength / 4);
-    ballastHalf.receiveShadow = true;
-    this.transOutSurfaceGroup.add(ballastHalf);
+    ballastHalf.receiveShadow = !IS_MOBILE_DEVICE;
+    targetGroup.add(ballastHalf);
 
-    // Side ground on transition starting at X = ±86.5m
     const sideL = new THREE.Mesh(sideGroundGeo, railGravelMat);
     sideL.rotation.x = -Math.PI / 2;
     sideL.position.set(-86.5, -0.125, 0);
-    this.transOutSurfaceGroup.add(sideL);
+    targetGroup.add(sideL);
 
     const sideR = new THREE.Mesh(sideGroundGeo, railGravelMat);
     sideR.rotation.x = -Math.PI / 2;
     sideR.position.set(86.5, -0.125, 0);
-    this.transOutSurfaceGroup.add(sideR);
+    targetGroup.add(sideR);
 
-    // Road deck on second half (Z: 0 to -20)
     const roadHalf = new THREE.Mesh(halfRoadGeo, roadDeckMat);
     roadHalf.position.set(0, -0.125, -segLength / 4);
-    roadHalf.receiveShadow = true;
-    this.transOutSurfaceGroup.add(roadHalf);
+    roadHalf.receiveShadow = !IS_MOBILE_DEVICE;
+    targetGroup.add(roadHalf);
 
-    // Road Curbs ONLY on second half (Z: 0 to -20)
     const curbL2 = new THREE.Mesh(halfCurbGeo, roadCurbMat);
     curbL2.position.set(-6.3, 0.075, -segLength / 4);
-    this.transOutSurfaceGroup.add(curbL2);
+    targetGroup.add(curbL2);
 
     const curbR2 = new THREE.Mesh(halfCurbGeo, roadCurbMat);
     curbR2.position.set(6.3, 0.075, -segLength / 4);
-    this.transOutSurfaceGroup.add(curbR2);
+    targetGroup.add(curbR2);
 
-    // Yellow transition plate at Z = 0
     const plate = new THREE.Mesh(transitionPlateGeo, transitionPlateMat);
     plate.position.set(0, 0.01, 0);
-    this.transOutSurfaceGroup.add(plate);
+    targetGroup.add(plate);
 
-    // 3 Railway Tracks continue from previous railway segment and end cleanly at Z = 0
     const pieceLength = 4.0;
     CONFIG.LANES.forEach((laneX) => {
       for (let i = 0; i < 5; i++) {
         const trackPiece = assetLoader.getModelClone('track_rail');
         trackPiece.scale.set(1.5, 1.2, 1.0);
         trackPiece.position.set(laneX, 0.02, 18.0 - i * pieceLength);
-        this.transOutSurfaceGroup.add(trackPiece);
+        targetGroup.add(trackPiece);
       }
     });
 
-    // Exit Catenary Termination Gantry at Z = 2m
     const exitGantry = assetLoader.getModelClone('overhead_gantry');
     exitGantry.position.set(0, 0, 2.0);
     exitGantry.scale.set(14.0, 14.0, 14.0);
-    this.transOutSurfaceGroup.add(exitGantry);
+    targetGroup.add(exitGantry);
   }
 
   // -------------------------------------------------------------
-  // PREBUILD SCENERY FOR ALL BIOMES (Zero Runtime Allocation)
+  // BIOME SCENERY BUILDERS (Built on demand per zone)
   // -------------------------------------------------------------
-  prebuildAllScenery() {
+  buildCityScenery(targetGroup) {
     const segZ = 0.0;
-    const sideX = 86.5; // Terrain center offset for 160m wide planes starting at X = ±6.5m (spans X = 6.5m to 166.5m)
+    const sideX = 86.5;
 
-    // --- 1. ZONE: CITY ---
     const cityGroundL = new THREE.Mesh(sideGroundGeo, cityGroundMat);
     cityGroundL.rotation.x = -Math.PI / 2;
     cityGroundL.position.set(-sideX, -0.125, segZ);
-    this.cityGroup.add(cityGroundL);
+    targetGroup.add(cityGroundL);
 
     const cityGroundR = new THREE.Mesh(sideGroundGeo, cityGroundMat);
     cityGroundR.rotation.x = -Math.PI / 2;
     cityGroundR.position.set(sideX, -0.125, segZ);
-    this.cityGroup.add(cityGroundR);
+    targetGroup.add(cityGroundR);
 
     const bldgNearL = assetLoader.getModelClone('bldg_standard');
     bldgNearL.position.set(-9.5, 0, segZ + 7);
     bldgNearL.scale.set(13.0, 16.0, 13.0);
-    this.cityGroup.add(bldgNearL);
+    targetGroup.add(bldgNearL);
 
     const bldgLowL = assetLoader.getModelClone('bldg_low');
     bldgLowL.position.set(-10.0, 0, segZ - 11);
     bldgLowL.scale.set(18.0, 18.0, 18.0);
-    this.cityGroup.add(bldgLowL);
+    targetGroup.add(bldgLowL);
 
     const skyL = assetLoader.getModelClone('bldg_skyscraper');
     skyL.position.set(-24.0, 0, segZ);
     skyL.scale.set(18.0, 22.0, 18.0);
-    this.cityGroup.add(skyL);
+    targetGroup.add(skyL);
 
     const bldgNearR = assetLoader.getModelClone('bldg_low');
     bldgNearR.position.set(9.5, 0, segZ - 6);
     bldgNearR.scale.set(18.0, 16.0, 18.0);
-    this.cityGroup.add(bldgNearR);
+    targetGroup.add(bldgNearR);
 
     const bldgStandardR = assetLoader.getModelClone('bldg_standard');
     bldgStandardR.position.set(10.2, 0, segZ + 11);
     bldgStandardR.scale.set(13.0, 15.0, 13.0);
-    this.cityGroup.add(bldgStandardR);
+    targetGroup.add(bldgStandardR);
 
     const skyR = assetLoader.getModelClone('bldg_skyscraper');
     skyR.position.set(24.0, 0, segZ + 5);
     skyR.scale.set(18.0, 24.0, 18.0);
-    this.cityGroup.add(skyR);
+    targetGroup.add(skyR);
 
     const poleCityL = assetLoader.getModelClone('prop_pole');
     poleCityL.position.set(-9.8, 0, segZ);
     poleCityL.rotation.y = Math.PI / 2;
     poleCityL.scale.setScalar(14.0);
-    this.cityGroup.add(poleCityL);
+    targetGroup.add(poleCityL);
 
     const poleCityR = assetLoader.getModelClone('prop_pole');
     poleCityR.position.set(9.8, 0, segZ - 12);
     poleCityR.rotation.y = Math.PI / 2;
     poleCityR.scale.setScalar(14.0);
-    this.cityGroup.add(poleCityR);
+    targetGroup.add(poleCityR);
+  }
 
-    // --- 2. ZONE: RAILWAY SCENERY ---
+  buildRailScenery(targetGroup) {
+    const segZ = 0.0;
     const parkedCarL = assetLoader.getModelClone('train_carriage');
     parkedCarL.position.set(-10.5, 0.15, segZ + 6);
     parkedCarL.scale.set(2.4, 2.5, 2.4);
-    this.railSceneryGroup.add(parkedCarL);
+    targetGroup.add(parkedCarL);
 
     const poleRailR = assetLoader.getModelClone('prop_pole');
     poleRailR.position.set(10.5, 0, segZ - 10);
     poleRailR.rotation.y = Math.PI / 2;
     poleRailR.scale.setScalar(14.0);
-    this.railSceneryGroup.add(poleRailR);
+    targetGroup.add(poleRailR);
+  }
 
-    // --- 3. ZONE: INDUSTRIAL ---
+  buildIndustrialScenery(targetGroup) {
+    const segZ = 0.0;
+    const sideX = 86.5;
+
     const indGroundL = new THREE.Mesh(sideGroundGeo, industrialGroundMat);
     indGroundL.rotation.x = -Math.PI / 2;
     indGroundL.position.set(-sideX, -0.125, segZ);
-    this.industrialGroup.add(indGroundL);
+    targetGroup.add(indGroundL);
 
     const indGroundR = new THREE.Mesh(sideGroundGeo, industrialGroundMat);
     indGroundR.rotation.x = -Math.PI / 2;
     indGroundR.position.set(sideX, -0.125, segZ);
-    this.industrialGroup.add(indGroundR);
+    targetGroup.add(indGroundR);
 
     const waterTower = assetLoader.getModelClone('prop_watertower');
     waterTower.position.set(-14.0, 0, segZ + 6);
     waterTower.scale.setScalar(9.0);
-    this.industrialGroup.add(waterTower);
+    targetGroup.add(waterTower);
 
     const contIndL1 = assetLoader.getModelClone('container');
     contIndL1.position.set(-9.2, 0, segZ - 8);
     contIndL1.scale.set(7.2, 7.2, 7.2);
-    this.industrialGroup.add(contIndL1);
+    targetGroup.add(contIndL1);
 
     const contIndL2 = assetLoader.getModelClone('container');
     contIndL2.position.set(-9.2, 2.5, segZ - 8);
     contIndL2.scale.set(7.2, 7.2, 7.2);
-    this.industrialGroup.add(contIndL2);
+    targetGroup.add(contIndL2);
 
     const chimney = assetLoader.getModelClone('prop_chimney');
     chimney.position.set(14.5, 0, segZ - 4);
     chimney.scale.set(9.0, 13.0, 9.0);
-    this.industrialGroup.add(chimney);
+    targetGroup.add(chimney);
 
     const contIndR = assetLoader.getModelClone('container');
     contIndR.position.set(9.2, 0, segZ + 8);
     contIndR.scale.set(7.2, 7.2, 7.2);
-    this.industrialGroup.add(contIndR);
+    targetGroup.add(contIndR);
 
     const warehouseR = assetLoader.getModelClone('bldg_low');
     warehouseR.position.set(20.0, 0, segZ + 2);
     warehouseR.scale.set(18.0, 10.0, 22.0);
-    this.industrialGroup.add(warehouseR);
+    targetGroup.add(warehouseR);
+  }
 
-    // --- 4. ZONE: DESERT ---
+  buildDesertScenery(targetGroup) {
+    const segZ = 0.0;
+    const sideX = 86.5;
+
     const desertL = new THREE.Mesh(sideGroundGeo, desertGroundMat);
     desertL.rotation.x = -Math.PI / 2;
     desertL.position.set(-sideX, -0.125, segZ);
-    this.desertGroup.add(desertL);
+    targetGroup.add(desertL);
 
     const desertR = new THREE.Mesh(sideGroundGeo, desertGroundMat);
     desertR.rotation.x = -Math.PI / 2;
     desertR.position.set(sideX, -0.125, segZ);
-    this.desertGroup.add(desertR);
+    targetGroup.add(desertR);
 
-    // Near and mid-distance sandstone rock formations along both sides
     [-14, -7, 0, 7, 14].forEach((zOff, idx) => {
       const rockL = assetLoader.getModelClone('rock_desert');
       const scaleL = 6.5 + (idx % 3) * 1.2;
       rockL.position.set(-9.5 - Math.abs(zOff) * 0.25, 0, segZ + zOff);
       rockL.scale.setScalar(scaleL);
       rockL.rotation.y = (zOff * 0.45);
-      this.desertGroup.add(rockL);
+      targetGroup.add(rockL);
 
       if (idx % 2 === 0) {
         const mesaL = assetLoader.getModelClone('rock_desert');
         mesaL.position.set(-22.0 - idx * 2.0, 0, segZ + zOff + 2);
         mesaL.scale.set(11.0, 14.0, 11.0);
         mesaL.rotation.y = zOff * 0.3;
-        this.desertGroup.add(mesaL);
+        targetGroup.add(mesaL);
       }
 
       const rockR = assetLoader.getModelClone('rock_desert');
@@ -608,167 +577,124 @@ class WorldSegment {
       rockR.position.set(9.5 + Math.abs(zOff) * 0.25, 0, segZ + zOff + 3);
       rockR.scale.setScalar(scaleR);
       rockR.rotation.y = -(zOff * 0.4);
-      this.desertGroup.add(rockR);
+      targetGroup.add(rockR);
 
       if (idx % 2 === 1) {
         const mesaR = assetLoader.getModelClone('rock_desert');
         mesaR.position.set(22.0 + idx * 2.0, 0, segZ + zOff - 2);
         mesaR.scale.set(12.0, 15.0, 12.0);
         mesaR.rotation.y = -zOff * 0.3;
-        this.desertGroup.add(mesaR);
+        targetGroup.add(mesaR);
       }
     });
+  }
 
-    // --- 5. ZONE: COAST (Dry Road Corridor, Beach Buffer on Right, Ocean Water Outside Road at X >= 20.5m) ---
-    // Left side beach ground (starts at X = -6.5m, extends to -166.5m)
+  buildCoastScenery(targetGroup) {
+    const segZ = 0.0;
+    const sideX = 86.5;
+
     const beachL = new THREE.Mesh(sideGroundGeo, coastSandMat);
     beachL.rotation.x = -Math.PI / 2;
     beachL.position.set(-sideX, -0.125, segZ);
-    this.coastGroup.add(beachL);
+    targetGroup.add(beachL);
 
-    // Right side beach embankment buffer (14m wide dry sand strip from road edge X=6.5m to ocean start X=20.5m)
     const coastBufferGeo = new THREE.PlaneGeometry(14.0, segLength);
     const coastBufferR = new THREE.Mesh(coastBufferGeo, coastSandMat);
     coastBufferR.rotation.x = -Math.PI / 2;
     coastBufferR.position.set(13.5, -0.125, segZ);
-    this.coastGroup.add(coastBufferR);
+    targetGroup.add(coastBufferR);
 
-    // Right side ocean water plane (starts strictly at X = +20.5m, Y = -0.28m, ZERO water inside playable road!)
     const oceanWaterGeo = new THREE.PlaneGeometry(146.0, segLength);
     const oceanR = new THREE.Mesh(oceanWaterGeo, oceanWaterMat);
     oceanR.rotation.x = -Math.PI / 2;
     oceanR.position.set(93.5, -0.28, segZ);
-    this.coastGroup.add(oceanR);
+    targetGroup.add(oceanR);
 
-    // Coastal scenery: Palms on left, seaside rocks on right buffer
     [-14, -6, 2, 10].forEach((zOff, idx) => {
       const palmL = assetLoader.getModelClone('tree_palm');
       palmL.position.set(-9.5, 0, segZ + zOff);
       palmL.scale.setScalar(6.0);
-      this.coastGroup.add(palmL);
+      targetGroup.add(palmL);
 
       const palmL2 = assetLoader.getModelClone('tree_palm');
       palmL2.position.set(-17.0, 0, segZ + zOff + 3);
       palmL2.scale.setScalar(7.5);
-      this.coastGroup.add(palmL2);
+      targetGroup.add(palmL2);
 
       const coastalRock = assetLoader.getModelClone('rock_desert');
       coastalRock.position.set(13.5 + (idx % 2) * 1.5, -0.1, segZ + zOff + 1);
       coastalRock.scale.set(4.5, 3.5, 4.5);
-      this.coastGroup.add(coastalRock);
+      targetGroup.add(coastalRock);
     });
+  }
 
-    // --- 6. ZONE: GREEN / NATURE (Dense verdant trees and bushes on both sides) ---
+  buildGreenScenery(targetGroup) {
+    const segZ = 0.0;
+    const sideX = 86.5;
+
     const greenL = new THREE.Mesh(sideGroundGeo, greenGrassMat);
     greenL.rotation.x = -Math.PI / 2;
     greenL.position.set(-sideX, -0.125, segZ);
-    this.greenGroup.add(greenL);
+    targetGroup.add(greenL);
 
     const greenR = new THREE.Mesh(sideGroundGeo, greenGrassMat);
     greenR.rotation.x = -Math.PI / 2;
     greenR.position.set(sideX, -0.125, segZ);
-    this.greenGroup.add(greenR);
+    targetGroup.add(greenR);
 
     [-14, -6, 2, 10].forEach((zOff) => {
       const treeL = assetLoader.getModelClone('tree_default');
       treeL.position.set(-9.5 + (zOff % 3) * 0.8, 0, segZ + zOff);
       treeL.scale.setScalar(5.5 + Math.abs(zOff) * 0.1);
-      this.greenGroup.add(treeL);
+      targetGroup.add(treeL);
 
       const bushL = assetLoader.getModelClone('plant_bush');
       bushL.position.set(-7.4, 0, segZ + zOff + 2);
       bushL.scale.setScalar(3.8);
-      this.greenGroup.add(bushL);
+      targetGroup.add(bushL);
 
       const treeR = assetLoader.getModelClone('tree_default');
       treeR.position.set(9.5 - (zOff % 3) * 0.8, 0, segZ + zOff);
       treeR.scale.setScalar(5.5 + Math.abs(zOff) * 0.1);
-      this.greenGroup.add(treeR);
+      targetGroup.add(treeR);
 
       const bushR = assetLoader.getModelClone('plant_bush');
       bushR.position.set(7.4, 0, segZ + zOff - 2);
       bushR.scale.setScalar(3.8);
-      this.greenGroup.add(bushR);
+      targetGroup.add(bushR);
     });
   }
 
-  /**
-   * PURE SEGMENT RECONSTRUCTION ARCHITECTURE:
-   * WorldSegment
-   * │
-   * ├── surfaceGroup       ← ONLY ONE (ROAD, RAILWAY, or TRANSITION)
-   * └── sceneryGroup       ← matching biome scenery
-   */
-  clearAllGroups() {
-    while (this.surfaceGroup.children.length > 0) {
-      this.surfaceGroup.remove(this.surfaceGroup.children[0]);
-    }
-    while (this.sceneryGroup.children.length > 0) {
-      this.sceneryGroup.remove(this.sceneryGroup.children[0]);
-    }
-
-    this.roadSurfaceGroup.visible = false;
-    this.railSurfaceGroup.visible = false;
-    this.transInSurfaceGroup.visible = false;
-    this.transOutSurfaceGroup.visible = false;
-
-    this.cityGroup.visible = false;
-    this.railSceneryGroup.visible = false;
-    this.industrialGroup.visible = false;
-    this.desertGroup.visible = false;
-    this.coastGroup.visible = false;
-    this.greenGroup.visible = false;
-  }
-
   setZone(nextZone) {
+    if (this.currentZone === nextZone && this.surfaceGroup.children.length > 0) {
+      return;
+    }
+
     this.currentZone = nextZone;
+    this.clearGroup(this.surfaceGroup);
+    this.clearGroup(this.sceneryGroup);
 
-    // 1. Perform complete defensive cleanup
-    this.clearAllGroups();
-
-    if (!this.group.children.includes(this.surfaceGroup)) {
-      this.group.add(this.surfaceGroup);
-    }
-    if (!this.group.children.includes(this.sceneryGroup)) {
-      this.group.add(this.sceneryGroup);
-    }
-
-    // 2. Attach EXACTLY ONE surface to surfaceGroup, and matching scenery to sceneryGroup
     if (nextZone === ZoneType.RAILWAY) {
-      this.surfaceGroup.add(this.railSurfaceGroup);
-      this.railSurfaceGroup.visible = true;
-
-      this.sceneryGroup.add(this.railSceneryGroup);
-      this.railSceneryGroup.visible = true;
+      this.buildRailSurface(this.surfaceGroup);
+      this.buildRailScenery(this.sceneryGroup);
     } else if (nextZone === ZoneType.TRANSITION_TO_RAIL) {
-      this.surfaceGroup.add(this.transInSurfaceGroup);
-      this.transInSurfaceGroup.visible = true;
-
-      this.sceneryGroup.add(this.railSceneryGroup);
-      this.railSceneryGroup.visible = true;
+      this.buildTransitionInSurface(this.surfaceGroup);
+      this.buildRailScenery(this.sceneryGroup);
     } else if (nextZone === ZoneType.TRANSITION_FROM_RAIL) {
-      this.surfaceGroup.add(this.transOutSurfaceGroup);
-      this.transOutSurfaceGroup.visible = true;
+      this.buildTransitionOutSurface(this.surfaceGroup);
     } else {
-      // Road mode surface (13m asphalt deck)
-      this.surfaceGroup.add(this.roadSurfaceGroup);
-      this.roadSurfaceGroup.visible = true;
+      this.buildRoadSurface(this.surfaceGroup);
 
       if (nextZone === ZoneType.CITY_ROAD) {
-        this.sceneryGroup.add(this.cityGroup);
-        this.cityGroup.visible = true;
+        this.buildCityScenery(this.sceneryGroup);
       } else if (nextZone === ZoneType.INDUSTRIAL) {
-        this.sceneryGroup.add(this.industrialGroup);
-        this.industrialGroup.visible = true;
+        this.buildIndustrialScenery(this.sceneryGroup);
       } else if (nextZone === ZoneType.DESERT) {
-        this.sceneryGroup.add(this.desertGroup);
-        this.desertGroup.visible = true;
+        this.buildDesertScenery(this.sceneryGroup);
       } else if (nextZone === ZoneType.COAST) {
-        this.sceneryGroup.add(this.coastGroup);
-        this.coastGroup.visible = true;
+        this.buildCoastScenery(this.sceneryGroup);
       } else if (nextZone === ZoneType.GREEN) {
-        this.sceneryGroup.add(this.greenGroup);
-        this.greenGroup.visible = true;
+        this.buildGreenScenery(this.sceneryGroup);
       }
     }
   }
