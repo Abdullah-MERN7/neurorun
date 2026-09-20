@@ -79,8 +79,6 @@ export class Player {
 
     this.playAnimation('run', 0.1);
 
-    this.playAnimation('run', 0.1);
-
     // ============================================================
     // NEURAL SHIELD: Clean Endless-Runner Energy Ring Aura
     // Thin green/cyan circular aura centered around Remy's body,
@@ -255,6 +253,14 @@ export class Player {
       this.slideTimer -= delta;
       if (this.slideTimer <= 0) {
         this.state = PlayerState.RUNNING;
+        this.playAnimation('run', 0.15);
+      }
+    }
+
+    // Restore RUN animation ONLY if grounded in RUNNING state but action is mismatched or stopped.
+    // NEVER call playAnimation repeatedly every frame.
+    if (this.state === PlayerState.RUNNING && this.isGrounded) {
+      if (this.currentActionName !== 'run' || (this.actions.run && !this.actions.run.isRunning())) {
         this.playAnimation('run', 0.15);
       }
     }

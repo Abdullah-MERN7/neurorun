@@ -93,6 +93,11 @@ export class InputManager {
         if (this.handlers.onDigit) this.handlers.onDigit(2);
         break;
 
+      case 'Digit4':
+      case 'Numpad4':
+        if (this.handlers.onDigit) this.handlers.onDigit(3);
+        break;
+
       case 'Escape':
       case 'KeyP':
         if (this.handlers.onPause) this.handlers.onPause();

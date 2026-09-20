@@ -46,12 +46,14 @@ export class UIManager {
       optCards: [
         document.getElementById('opt-card-0'),
         document.getElementById('opt-card-1'),
-        document.getElementById('opt-card-2')
+        document.getElementById('opt-card-2'),
+        document.getElementById('opt-card-3')
       ],
       optTexts: [
         document.getElementById('opt-text-0'),
         document.getElementById('opt-text-1'),
-        document.getElementById('opt-text-2')
+        document.getElementById('opt-text-2'),
+        document.getElementById('opt-text-3')
       ],
 
       // Pause Screen
@@ -190,20 +192,28 @@ export class UIManager {
     this.elements.modalQText.textContent = question.question;
 
     let answered = false;
+    const numOpts = question.options ? question.options.length : 4;
 
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < this.elements.optCards.length; i++) {
       const card = this.elements.optCards[i];
-      if (this.elements.optTexts[i]) {
-        this.elements.optTexts[i].textContent = question.options[i];
-      }
-      if (card) {
+      if (!card) continue;
+
+      if (i < numOpts) {
+        card.style.display = 'flex';
         card.className = 'answer-option-btn';
         card.disabled = false;
+
+        if (this.elements.optTexts[i]) {
+          this.elements.optTexts[i].textContent = question.options[i];
+        }
+
         card.onclick = () => {
           if (answered) return;
           answered = true;
           this.handleAnswerSelection(i, question.correctIndex, onSubmitAnswer);
         };
+      } else {
+        card.style.display = 'none';
       }
     }
 
@@ -214,7 +224,7 @@ export class UIManager {
     const isCorrect = selectedIndex === correctIndex;
 
     // Visual feedback on the chosen card
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < this.elements.optCards.length; i++) {
       const card = this.elements.optCards[i];
       if (!card) continue;
       card.disabled = true;

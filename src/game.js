@@ -318,7 +318,7 @@ export class Game {
     if (this.player) {
       if (this.player.isGrounded) {
         this.player.state = PlayerState.RUNNING;
-        this.player.playAnimation('run', 0.1, true);
+        this.player.playAnimation('run', 0.1);
       }
     }
   }

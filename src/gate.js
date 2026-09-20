@@ -22,14 +22,35 @@ export class GateManager {
   }
 
   initGateStructure() {
-    // Highway gantry sign truss scaled to span 3 railway tracks (width ~8.8m, clearance ~5.5m)
-    this.truss = assetLoader.getModelClone('gate_truss');
-    // Align gantry legs on the outer ballast edges
-    this.truss.scale.set(8.5, 7.8, 8.5);
-    this.truss.position.set(0, 0, 0);
-    this.group.add(this.truss);
+    // 1. Dual side vertical clearance support pillars placed safely outside the 3-lane corridor at X = +-4.8m
+    const pillarGeo = new THREE.CylinderGeometry(0.18, 0.22, 5.4, 12);
+    const pillarMat = new THREE.MeshStandardMaterial({
+      color: 0x1e293b,
+      roughness: 0.6,
+      metalness: 0.8,
+      emissive: 0x0f172a
+    });
 
-    // Glowing Knowledge Gate overhead cyber sign
+    const pillarL = new THREE.Mesh(pillarGeo, pillarMat);
+    pillarL.position.set(-4.8, 2.7, 0);
+    this.group.add(pillarL);
+
+    const pillarR = new THREE.Mesh(pillarGeo, pillarMat);
+    pillarR.position.set(4.8, 2.7, 0);
+    this.group.add(pillarR);
+
+    // Overhead truss crossbar spanning between pillars at Y = 5.3m
+    const trussBarGeo = new THREE.BoxGeometry(10.2, 0.35, 0.35);
+    const trussBarMat = new THREE.MeshStandardMaterial({
+      color: 0x334155,
+      roughness: 0.5,
+      metalness: 0.7
+    });
+    const trussBar = new THREE.Mesh(trussBarGeo, trussBarMat);
+    trussBar.position.set(0, 5.3, 0);
+    this.group.add(trussBar);
+
+    // 2. Glowing Knowledge Gate overhead cyber sign banner
     const canvas = document.createElement('canvas');
     canvas.width = 1024;
     canvas.height = 256;
@@ -58,20 +79,20 @@ export class GateManager {
       side: THREE.DoubleSide
     });
 
-    const boardGeo = new THREE.PlaneGeometry(7.2, 1.8);
+    const boardGeo = new THREE.PlaneGeometry(8.2, 2.0);
     const board = new THREE.Mesh(boardGeo, boardMat);
     board.position.set(0, 4.4, 0);
     this.group.add(board);
 
-    // Glowing neon energy portal arch
-    const beamGeo = new THREE.CylinderGeometry(0.06, 0.06, 5.0, 8);
+    // 3. Glowing cyan neon side portal trim lines at X = +-4.75m
+    const beamGeo = new THREE.CylinderGeometry(0.05, 0.05, 5.0, 8);
     const beamMat = new THREE.MeshBasicMaterial({
       color: 0x00e5ff,
       transparent: true,
-      opacity: 0.75
+      opacity: 0.85
     });
 
-    [-4.3, 4.3].forEach((x) => {
+    [-4.75, 4.75].forEach((x) => {
       const beam = new THREE.Mesh(beamGeo, beamMat);
       beam.position.set(x, 2.5, 0);
       this.group.add(beam);
