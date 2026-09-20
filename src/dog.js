@@ -79,13 +79,14 @@ export class DogChase {
   }
 
   buildDogModel() {
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     this.bodyGroup = new THREE.Group();
 
     // 1. Torso
     const torso = new THREE.Mesh(dogBodyGeo, furCoatMat);
     torso.position.set(0, 0.58, 0);
-    torso.castShadow = true;
-    torso.receiveShadow = true;
+    torso.castShadow = !isMobile;
+    torso.receiveShadow = !isMobile;
     this.bodyGroup.add(torso);
 
     // 2. Chest & Neck

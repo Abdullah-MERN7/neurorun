@@ -72,6 +72,8 @@ export class GateManager {
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
+    texture.generateMipmaps = false;
+    texture.minFilter = THREE.LinearFilter;
 
     const boardMat = new THREE.MeshBasicMaterial({
       map: texture,

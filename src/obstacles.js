@@ -34,6 +34,8 @@ function getHazardStripeTexture() {
   hazardStripeTexture.wrapS = THREE.RepeatWrapping;
   hazardStripeTexture.wrapT = THREE.RepeatWrapping;
   hazardStripeTexture.repeat.set(3, 1);
+  hazardStripeTexture.generateMipmaps = false;
+  hazardStripeTexture.minFilter = THREE.LinearFilter;
   return hazardStripeTexture;
 }
 

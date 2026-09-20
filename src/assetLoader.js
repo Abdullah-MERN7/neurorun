@@ -108,10 +108,11 @@ class AssetLoader {
    * Set up shadows and materials for Three.js rendering.
    */
   optimizeModel(object) {
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     object.traverse((child) => {
       if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
+        child.castShadow = !isMobile;
+        child.receiveShadow = !isMobile;
         if (child.material) {
           child.material.side = THREE.FrontSide;
           // Soften overly harsh specular highlights

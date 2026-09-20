@@ -47,7 +47,7 @@ export class Game {
     // Mobile & Device Capability Profile
     this.isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     this.pixelRatio = this.isMobile
-      ? Math.min(window.devicePixelRatio || 1, 1.5)
+      ? Math.min(window.devicePixelRatio || 1, 1.25)
       : Math.min(window.devicePixelRatio || 1, 2.0);
     this.contextState = 'ACTIVE';
     this.jsErrors = [];
@@ -421,7 +421,8 @@ export class Game {
     // REQUIREMENT 3: Mobile Renderer Settings & Capped DPR
     this.renderer = new THREE.WebGLRenderer({
       antialias: !this.isMobile,
-      powerPreference: 'high-performance',
+      powerPreference: this.isMobile ? 'default' : 'high-performance',
+      precision: this.isMobile ? 'mediump' : 'highp',
       preserveDrawingBuffer: false,
       logarithmicDepthBuffer: false,
       stencil: false,
