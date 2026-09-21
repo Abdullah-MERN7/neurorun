@@ -329,6 +329,7 @@ export class Game {
 
   submitQuestionAnswer(selectedIndex, isCorrect) {
     if (!this.activeQuestion) return;
+    this.activeQuestion = null; // Guard against double execution
 
     this.totalQuestions++;
     const isDouble = this.activePowerup && this.activePowerup.id === 'DOUBLE_SCORE';

@@ -158,11 +158,11 @@ canvas {
   text-shadow: 0 0 15px var(--accent-purple);
 }
 
-/* Center HUD Status Strip: Dog Threat Warning in exact TOP CENTER */
+/* HUD Status Strip: Power-up on LEFT, Dog Threat Warning on RIGHT (Center 100% Clear) */
 .hud-status-strip {
   position: relative;
   display: flex;
-  justify-content: center; /* Exactly centers the dog threat meter in top-center */
+  justify-content: space-between;
   align-items: center;
   width: 100%;
   margin-top: 14px;
@@ -183,6 +183,7 @@ canvas {
   gap: 10px;
   backdrop-filter: blur(10px);
   animation: pulsePill 1.8s infinite;
+  pointer-events: auto;
 }
 
 @keyframes pulsePill {
@@ -218,7 +219,11 @@ canvas {
   transition: width 0.1s linear;
 }
 
+/* Dog Threat pill moved to TOP-RIGHT corner under combo badge */
 .dog-threat-pill {
+  position: absolute;
+  right: 0;
+  top: 0;
   background: rgba(14, 20, 32, 0.85);
   border-radius: 20px;
   padding: 6px 16px;
@@ -231,6 +236,7 @@ canvas {
   font-weight: 800;
   letter-spacing: 1.5px;
   transition: all 0.3s ease;
+  pointer-events: auto;
 }
 
 .dog-threat-pill.dog-safe {
@@ -336,6 +342,76 @@ canvas {
   padding: 5px 14px;
   border-radius: 20px;
   border: 1px solid rgba(168, 85, 247, 0.4);
+}
+
+/* Question 10-Second Timer Badge */
+.q-timer-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 1.5px;
+  color: #00e5ff;
+  background: rgba(0, 229, 255, 0.12);
+  border: 1.5px solid rgba(0, 229, 255, 0.4);
+  padding: 5px 16px;
+  border-radius: 20px;
+  box-shadow: 0 0 14px rgba(0, 229, 255, 0.25);
+  transition: all 0.2s ease;
+}
+
+.q-timer-badge.urgent {
+  color: #ffffff;
+  background: rgba(239, 68, 68, 0.32);
+  border-color: #ef4444;
+  box-shadow: 0 0 25px rgba(239, 68, 68, 0.7);
+  animation: urgentPulse 0.5s infinite alternate;
+}
+
+@keyframes urgentPulse {
+  from { transform: scale(1); box-shadow: 0 0 15px rgba(239, 68, 68, 0.5); }
+  to { transform: scale(1.08); box-shadow: 0 0 30px rgba(239, 68, 68, 0.95); }
+}
+
+.q-timer-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #94a3b8;
+}
+
+.q-timer-badge.urgent .q-timer-label {
+  color: #fca5a5;
+}
+
+.q-timer-val {
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.q-timer-bar-wrap {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: -6px;
+  margin-bottom: 2px;
+}
+
+.q-timer-bar {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, #00e5ff, #a855f7);
+  border-radius: 3px;
+  transition: width 0.1s linear;
+}
+
+.q-timer-bar.urgent {
+  background: linear-gradient(90deg, #f59e0b, #ef4444);
+  box-shadow: 0 0 12px #ef4444;
 }
 
 .q-pause-indicator {

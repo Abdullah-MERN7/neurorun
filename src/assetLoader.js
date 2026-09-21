@@ -20,23 +20,24 @@ class AssetLoader {
     this.failedAssets = [];
     this.loadedCount = 0;
     this.totalCount = 0;
+    this.telemetry = [];
 
     const assetManifest = [
-      // 1. Character & Animations (FBX) - REQUIRED
+      // 1. Character & Animations (FBX) - ESSENTIAL (high priority)
       { id: 'remy', type: 'fbx', path: '/assets/characters/Remy.fbx', desc: 'Character Model', required: true },
       { id: 'anim_run', type: 'fbx', path: '/assets/characters/Running.fbx', desc: 'Running Animation', required: true },
       { id: 'anim_jump', type: 'fbx', path: '/assets/characters/Jumping.fbx', desc: 'Jumping Animation', required: true },
       { id: 'anim_slide', type: 'fbx', path: '/assets/characters/Running Slide.fbx', desc: 'Slide Animation', required: true },
 
-      // 2. Track GLB - REQUIRED
+      // 2. Track GLB - ESSENTIAL
       { id: 'track_rail', type: 'gltf', path: '/assets/trains/Models/GLB format/railroad-straight.glb', desc: 'Railway Track', required: true },
 
-      // 3. Train GLBs - OPTIONAL (fallback to group if missing)
+      // 3. Train GLBs - ESSENTIAL
       { id: 'train_diesel', type: 'gltf', path: '/assets/trains/Models/GLB format/train-diesel-a.glb', desc: 'Diesel Locomotive', required: false },
       { id: 'train_bullet', type: 'gltf', path: '/assets/trains/Models/GLB format/train-electric-bullet-a.glb', desc: 'Bullet Train', required: false },
       { id: 'train_carriage', type: 'gltf', path: '/assets/trains/Models/GLB format/train-carriage-container-blue.glb', desc: 'Train Carriage', required: false },
 
-      // 4. Obstacle GLBs
+      // 4. Obstacle GLBs - ESSENTIAL
       { id: 'barrier', type: 'gltf', path: '/assets/environment/Models/GLB format/construction-barrier.glb', desc: 'Road Barrier', required: true },
       { id: 'container', type: 'gltf', path: '/assets/environment/Models/GLB format/shipping-container-a.glb', desc: 'Cargo Container', required: false },
       { id: 'fence', type: 'gltf', path: '/assets/environment/Models/GLB format/construction-fence.glb', desc: 'Security Fence', required: false },
@@ -66,9 +67,21 @@ class AssetLoader {
     this.totalCount = assetManifest.length;
     this.loadedCount = 0;
     this.failedAssets = [];
+    const startupStart = performance.now();
 
-    for (const item of assetManifest) {
-      onProgress((this.loadedCount / this.totalCount), `Loading ${item.desc}...`);
+    // Small concurrency pool (3 concurrent asset loads)
+    const CONCURRENCY_LIMIT = 3;
+    let nextIndex = 0;
+
+    const loadItem = async (item) => {
+      // Check cache first to avoid duplicate network requests
+      if (this.cache.has(item.id)) {
+        this.loadedCount++;
+        onProgress(this.loadedCount / this.totalCount, `Loading assets... (${this.loadedCount}/${this.totalCount})`);
+        return;
+      }
+
+      const assetStart = performance.now();
       try {
         if (item.type === 'fbx') {
           const fbx = await this.fbxLoader.loadAsync(item.path);
@@ -90,16 +103,54 @@ class AssetLoader {
           this.optimizeModel(gltf.scene);
           this.cache.set(item.id, gltf.scene);
         }
-        this.loadedCount++;
+        const duration = performance.now() - assetStart;
+        this.telemetry.push({
+          id: item.id,
+          path: item.path,
+          type: item.type,
+          desc: item.desc,
+          durationMs: Math.round(duration),
+          status: 'success'
+        });
       } catch (err) {
+        const duration = performance.now() - assetStart;
         console.warn(`[AssetLoader] Failed asset (${item.required ? 'REQUIRED' : 'OPTIONAL'}): ${item.path}`, err);
         this.failedAssets.push(item.path);
+        this.telemetry.push({
+          id: item.id,
+          path: item.path,
+          type: item.type,
+          desc: item.desc,
+          durationMs: Math.round(duration),
+          status: 'failed',
+          error: err.message
+        });
         if (item.required) {
           throw new Error(`REQUIRED asset failed: ${item.path}`);
         }
+      } finally {
+        this.loadedCount++;
+        onProgress(this.loadedCount / this.totalCount, `Loading: ${this.loadedCount}/${this.totalCount} assets`);
       }
-      onProgress((this.loadedCount / this.totalCount), `Loaded ${item.desc}`);
-    }
+    };
+
+    // Launch worker threads for controlled concurrency
+    const workerCount = Math.min(CONCURRENCY_LIMIT, assetManifest.length);
+    const workers = Array.from({ length: workerCount }, async () => {
+      while (nextIndex < assetManifest.length) {
+        const idx = nextIndex++;
+        await loadItem(assetManifest[idx]);
+      }
+    });
+
+    await Promise.all(workers);
+
+    const totalStartupSec = ((performance.now() - startupStart) / 1000).toFixed(2);
+    const sortedByDuration = [...this.telemetry].sort((a, b) => b.durationMs - a.durationMs);
+    const slowest5 = sortedByDuration.slice(0, 5);
+
+    console.info(`[AssetLoader] Telemetry — Concurrency: ${CONCURRENCY_LIMIT}, Total assets: ${this.loadedCount}/${this.totalCount}, Total time: ${totalStartupSec}s`);
+    console.info('[AssetLoader] Slowest 5 assets:', slowest5);
 
     onProgress(1.0, 'All assets loaded successfully!');
   }

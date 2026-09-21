@@ -4,6 +4,8 @@ export class UIManager {
   constructor() {
     this.elements = {};
     this.highScore = parseInt(localStorage.getItem('neurorun_highscore') || '0', 10);
+    this.questionTimer = null;
+    this.questionAnswered = false;
   }
 
   init() {
@@ -89,6 +91,9 @@ export class UIManager {
       // Question Pause Modal
       questionScreen: document.getElementById('question-screen'),
       modalCategory: document.getElementById('modal-q-category'),
+      modalQTimer: document.getElementById('modal-q-timer'),
+      modalQTimerVal: document.getElementById('modal-q-timer-val'),
+      modalQTimerBar: document.getElementById('modal-q-timer-bar'),
       modalQText: document.getElementById('modal-q-text'),
       optCards: [
         document.getElementById('opt-card-0'),
@@ -322,17 +327,38 @@ export class UIManager {
     }
   }
 
+  clearQuestionTimer() {
+    if (this.questionTimer) {
+      clearInterval(this.questionTimer);
+      this.questionTimer = null;
+    }
+  }
+
   /**
    * Display the Question Pause Modal while game is frozen.
-   * Clicking an answer or keyboard 1/2/3 immediately submits it.
+   * Clicking an answer or keyboard 1/2/3/4 immediately submits it.
+   * Starts a 10-second timer; if player does not answer, submits as WRONG.
    */
   showQuestionModal(question, onSubmitAnswer) {
     if (!this.elements.questionScreen || !question) return;
 
+    this.clearQuestionTimer();
+    this.questionAnswered = false;
+
     this.elements.modalCategory.textContent = question.category || 'KNOWLEDGE GATE';
     this.elements.modalQText.textContent = question.question;
 
-    let answered = false;
+    if (this.elements.modalQTimerVal) {
+      this.elements.modalQTimerVal.textContent = '10s';
+    }
+    if (this.elements.modalQTimer) {
+      this.elements.modalQTimer.classList.remove('urgent');
+    }
+    if (this.elements.modalQTimerBar) {
+      this.elements.modalQTimerBar.style.width = '100%';
+      this.elements.modalQTimerBar.classList.remove('urgent');
+    }
+
     const numOpts = question.options ? question.options.length : 4;
 
     for (let i = 0; i < this.elements.optCards.length; i++) {
@@ -349,8 +375,6 @@ export class UIManager {
         }
 
         card.onclick = () => {
-          if (answered) return;
-          answered = true;
           this.handleAnswerSelection(i, question.correctIndex, onSubmitAnswer);
         };
       } else {
@@ -359,9 +383,66 @@ export class UIManager {
     }
 
     this.elements.questionScreen.style.display = 'flex';
+
+    // 10-second countdown timer
+    let remaining = 10.0;
+    const intervalMs = 100;
+    this.questionTimer = setInterval(() => {
+      remaining -= intervalMs / 1000;
+
+      const displaySec = Math.max(0, Math.ceil(remaining));
+      if (this.elements.modalQTimerVal) {
+        this.elements.modalQTimerVal.textContent = `${displaySec}s`;
+      }
+
+      if (this.elements.modalQTimerBar) {
+        const pct = Math.max(0, Math.min(100, (remaining / 10.0) * 100));
+        this.elements.modalQTimerBar.style.width = `${pct}%`;
+      }
+
+      // Visual urgency in the final 3 seconds
+      if (remaining <= 3.0) {
+        if (this.elements.modalQTimer) {
+          this.elements.modalQTimer.classList.add('urgent');
+        }
+        if (this.elements.modalQTimerBar) {
+          this.elements.modalQTimerBar.classList.add('urgent');
+        }
+      }
+
+      // Timeout -> automatically submit as INCORRECT
+      if (remaining <= 0) {
+        this.clearQuestionTimer();
+        if (this.questionAnswered) return;
+        this.questionAnswered = true;
+
+        if (this.elements.modalQTimerVal) {
+          this.elements.modalQTimerVal.textContent = '0s';
+        }
+
+        // Highlight correct choice for brief learning feedback
+        for (let i = 0; i < this.elements.optCards.length; i++) {
+          const card = this.elements.optCards[i];
+          if (!card) continue;
+          card.disabled = true;
+          if (i === question.correctIndex) {
+            card.classList.add('correct-choice');
+          }
+        }
+
+        setTimeout(() => {
+          this.hideQuestionModal();
+          if (onSubmitAnswer) onSubmitAnswer(-1, false);
+        }, 450);
+      }
+    }, intervalMs);
   }
 
   handleAnswerSelection(selectedIndex, correctIndex, callback) {
+    if (this.questionAnswered) return;
+    this.questionAnswered = true;
+    this.clearQuestionTimer();
+
     const isCorrect = selectedIndex === correctIndex;
 
     // Visual feedback on the chosen card
@@ -384,6 +465,7 @@ export class UIManager {
   }
 
   hideQuestionModal() {
+    this.clearQuestionTimer();
     if (this.elements.questionScreen) {
       this.elements.questionScreen.style.display = 'none';
     }

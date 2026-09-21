@@ -46,7 +46,7 @@ class AudioManager {
 
   createAudioElement(src) {
     const audio = new Audio(src);
-    audio.preload = 'auto';
+    audio.preload = 'none'; // Prevent audio downloads from competing with startup FBX loading
     return audio;
   }
 
@@ -63,6 +63,16 @@ class AudioManager {
       if (this.audioContext && this.audioContext.state === 'suspended') {
         this.audioContext.resume();
       }
+
+      // Warm up HTML audio elements once game has loaded and user interacts
+      Object.values(this.sounds).forEach((item) => {
+        if (Array.isArray(item)) {
+          item.forEach(a => { if (a && a.preload === 'none') a.preload = 'auto'; });
+        } else if (item && item.preload === 'none') {
+          item.preload = 'auto';
+        }
+      });
+
       this.isUnlocked = true;
     } catch (e) {
       console.warn('Audio unlock warning:', e);
