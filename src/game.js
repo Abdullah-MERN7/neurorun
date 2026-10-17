@@ -35,6 +35,9 @@ export class Game {
     this.camera = null;
     this.renderer = null;
     this.clock = new THREE.Clock();
+    this.contextState = 'ACTIVE';
+    this.stateBeforeContextLoss = null;
+    this.contextCreatedAt = null;
 
     this.player = null;
     this.world = null;
@@ -149,6 +152,7 @@ export class Game {
       antialias: !this.isMobile,
       powerPreference: this.isMobile ? 'default' : 'high-performance'
     });
+    this.contextCreatedAt = performance.now();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(this.pixelRatio);
 
@@ -172,15 +176,37 @@ export class Game {
     canvas.addEventListener('webglcontextlost', (event) => {
       event.preventDefault();
       console.warn('[Game] WebGL context lost!');
+      if (this.contextState === 'LOST') return;
+
+      this.stateBeforeContextLoss = this.state;
       this.contextState = 'LOST';
-      if (this.state === GameState.PLAYING) {
-        this.state = GameState.PAUSED;
-      }
+      if (this.stateBeforeContextLoss === GameState.PLAYING) this.state = GameState.PAUSED;
+
+      const lifetimeMs = this.contextCreatedAt === null
+        ? 0
+        : Math.round(performance.now() - this.contextCreatedAt);
+      const renderInfo = this.renderer.info;
+      uiManager.showContextLossAlert({
+        contextLifetimeSec: lifetimeMs / 1000,
+        contextLifetimeMs: lifetimeMs,
+        glError: 'WebGL context lost',
+        drawCalls: renderInfo.render.calls,
+        triangles: renderInfo.render.triangles,
+        geometries: renderInfo.memory.geometries,
+        textures: renderInfo.memory.textures,
+        canvasCount: document.querySelectorAll('canvas').length,
+        suspectedCause: 'The device or browser GPU reset the WebGL context. Reload the run if it does not recover.'
+      });
     });
 
     canvas.addEventListener('webglcontextrestored', () => {
       console.log('[Game] WebGL context restored.');
       this.contextState = 'ACTIVE';
+      if (this.stateBeforeContextLoss !== null) {
+        this.state = this.stateBeforeContextLoss;
+        this.stateBeforeContextLoss = null;
+      }
+      uiManager.hideContextLossAlert();
     });
 
     // REQUIREMENT 8: Lightweight Mobile Lighting Setup
