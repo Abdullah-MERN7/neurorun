@@ -1,15 +1,66 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 
 class AssetLoader {
   constructor() {
     this.gltfLoader = new GLTFLoader();
+    this.gltfLoader.setMeshoptDecoder(MeshoptDecoder);
     this.fbxLoader = new FBXLoader();
 
     this.cache = new Map();
     this.animations = new Map();
     this.character = null;
+  }
+
+  async loadWithRetry(load, path) {
+    const maxAttempts = 3;
+    let lastError;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await load();
+      } catch (error) {
+        lastError = error;
+        if (attempt === maxAttempts) break;
+
+        const delayMs = 250 * 2 ** (attempt - 1);
+        console.warn(
+          `[AssetLoader] Attempt ${attempt}/${maxAttempts} failed for ${path}; retrying in ${delayMs}ms`,
+          error
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+
+    throw lastError;
+  }
+
+  async loadCharacterAnimation(item) {
+    try {
+      const gltf = await this.loadWithRetry(
+        () => this.gltfLoader.loadAsync(item.path),
+        item.path
+      );
+      const clip = gltf.animations?.[0];
+      if (!clip) throw new Error(`Animation clip missing from ${item.path}`);
+      return { asset: gltf.scene, clip };
+    } catch (gltfError) {
+      if (!item.fallbackPath) throw gltfError;
+
+      console.warn(
+        `[AssetLoader] GLB animation failed; using FBX fallback ${item.fallbackPath}`,
+        gltfError
+      );
+      const fbx = await this.loadWithRetry(
+        () => this.fbxLoader.loadAsync(item.fallbackPath),
+        item.fallbackPath
+      );
+      const clip = fbx.animations?.[0];
+      if (!clip) throw new Error(`Animation clip missing from ${item.fallbackPath}`);
+      return { asset: fbx, clip };
+    }
   }
 
   /**
@@ -23,11 +74,11 @@ class AssetLoader {
     this.telemetry = [];
 
     const assetManifest = [
-      // 1. Character & Animations (FBX) - ESSENTIAL (high priority)
+      // 1. Character & Animations - ESSENTIAL (high priority)
       { id: 'remy', type: 'fbx', path: '/assets/characters/Remy.fbx', desc: 'Character Model', required: true },
-      { id: 'anim_run', type: 'fbx', path: '/assets/characters/Running.fbx', desc: 'Running Animation', required: true },
-      { id: 'anim_jump', type: 'fbx', path: '/assets/characters/Jumping.fbx', desc: 'Jumping Animation', required: true },
-      { id: 'anim_slide', type: 'fbx', path: '/assets/characters/Running Slide.fbx', desc: 'Slide Animation', required: true },
+      { id: 'anim_run', type: 'gltf', path: '/assets/characters/Running.glb', fallbackPath: '/assets/characters/Running.fbx', desc: 'Running Animation', required: true },
+      { id: 'anim_jump', type: 'gltf', path: '/assets/characters/Jumping.glb', fallbackPath: '/assets/characters/Jumping.fbx', desc: 'Jumping Animation', required: true },
+      { id: 'anim_slide', type: 'gltf', path: '/assets/characters/Running Slide.glb', fallbackPath: '/assets/characters/Running Slide.fbx', desc: 'Slide Animation', required: true },
 
       // 2. Track GLB - ESSENTIAL
       { id: 'track_rail', type: 'gltf', path: '/assets/trains/Models/GLB format/railroad-straight.glb', desc: 'Railway Track', required: true },
@@ -84,24 +135,28 @@ class AssetLoader {
       const assetStart = performance.now();
       try {
         if (item.type === 'fbx') {
-          const fbx = await this.fbxLoader.loadAsync(item.path);
+          const fbx = await this.loadWithRetry(
+            () => this.fbxLoader.loadAsync(item.path),
+            item.path
+          );
           if (item.id === 'remy') {
             this.character = fbx;
             this.optimizeModel(this.character);
-          } else if (item.id.startsWith('anim_')) {
-            const clip = fbx.animations && fbx.animations[0];
-            if (clip) {
-              const name = item.id.replace('anim_', '');
-              clip.name = name;
-              this.stripRootMotion(clip);
-              this.animations.set(name, clip);
-            }
           }
           this.cache.set(item.id, fbx);
         } else if (item.type === 'gltf') {
-          const gltf = await this.gltfLoader.loadAsync(item.path);
-          this.optimizeModel(gltf.scene);
-          this.cache.set(item.id, gltf.scene);
+          if (item.id.startsWith('anim_')) {
+            const { asset, clip } = await this.loadCharacterAnimation(item);
+            const name = item.id.replace('anim_', '');
+            clip.name = name;
+            this.stripRootMotion(clip);
+            this.animations.set(name, clip);
+            this.cache.set(item.id, asset);
+          } else {
+            const gltf = await this.gltfLoader.loadAsync(item.path);
+            this.optimizeModel(gltf.scene);
+            this.cache.set(item.id, gltf.scene);
+          }
         }
         const duration = performance.now() - assetStart;
         this.telemetry.push({
